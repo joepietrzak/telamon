@@ -36,7 +36,8 @@
     "build": "tsup && cp src/styles/tokens.css src/styles/base.css dist/ && mv dist/base.css dist/styles.css",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "d3-force": "^3.0.0",
@@ -70,5 +71,17 @@
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joepietrzak/telamon.git",
+    "directory": "packages/telamon"
+  },
+  "bugs": {
+    "url": "https://github.com/joepietrzak/telamon/issues"
+  },
+  "homepage": "https://github.com/joepietrzak/telamon#readme",
+  "engines": {
+    "node": ">=18"
   }
 }
