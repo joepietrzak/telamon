@@ -1,0 +1,102 @@
+/*
+ * Chrome for the demo itself, plus one alternative token set.
+ *
+ * `.theme-brand` overrides nothing but `--okf-*` custom properties: no telamon
+ * component or class is touched, which is the whole point of the token layer.
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--okf-color-bg);
+}
+
+.playground {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.playground-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  font: 500 0.8125rem/1.5 var(--okf-font-sans);
+  color: var(--okf-color-muted);
+  background: var(--okf-color-surface);
+  border-bottom: 1px solid var(--okf-color-border);
+}
+
+.playground-bar label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.playground-bar select,
+.playground-bar button {
+  font: inherit;
+  color: var(--okf-color-fg);
+  background: var(--okf-color-bg);
+  border: 1px solid var(--okf-color-border-strong);
+  border-radius: var(--okf-radius-sm);
+  padding: 0.15rem 0.4rem;
+}
+
+.playground-diagnostics {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  list-style: none;
+  font: 0.8125rem/1.6 var(--okf-font-mono);
+  background: var(--okf-color-warning-soft);
+  color: var(--okf-color-warning);
+  border-bottom: 1px solid var(--okf-color-border);
+}
+
+.playground-diagnostics li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.playground-diagnostics code {
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------- an alternative theme */
+
+.theme-brand {
+  --okf-font-sans: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --okf-text-base: 1rem;
+  --okf-text-3xl: 2.5rem;
+  --okf-leading: 1.7;
+
+  --okf-radius-sm: 0;
+  --okf-radius-md: 0;
+  --okf-radius-lg: 0;
+  --okf-radius-pill: 0;
+  --okf-border-width: 2px;
+
+  --okf-color-bg: #fbf7ef;
+  --okf-color-surface: #f2ebdd;
+  --okf-color-surface-raised: #fffdf8;
+  --okf-color-fg: #241f18;
+  --okf-color-muted: #6a5f4d;
+  --okf-color-subtle: #92866f;
+  --okf-color-border: #ddd2bc;
+  --okf-color-border-strong: #b9a888;
+
+  --okf-color-accent: #8a3324;
+  --okf-color-accent-fg: #fffdf8;
+  --okf-color-accent-soft: #f6e6df;
+
+  --okf-sidebar-width: 15rem;
+  --okf-content-max: 42rem;
+}

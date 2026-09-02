@@ -1,0 +1,172 @@
+/*
+ * Default design tokens.
+ *
+ * This file is optional. `styles.css` never hardcodes a value — every rule
+ * reads a `--okf-*` custom property with an inline fallback — so you can either
+ * import this for a working default look and override individual tokens, or
+ * skip it entirely and define the whole set yourself.
+ *
+ * Tokens are declared on `:root` so they cascade into the site wherever it is
+ * mounted. To scope them instead, redeclare the same properties on a selector
+ * of your own (`.my-theme { --okf-color-accent: … }`).
+ */
+
+:root {
+  /* Type */
+  --okf-font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --okf-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --okf-text-xs: 0.75rem;
+  --okf-text-sm: 0.8125rem;
+  --okf-text-base: 0.9375rem;
+  --okf-text-lg: 1.125rem;
+  --okf-text-xl: 1.375rem;
+  --okf-text-2xl: 1.75rem;
+  --okf-text-3xl: 2.125rem;
+
+  --okf-leading-tight: 1.25;
+  --okf-leading: 1.65;
+
+  --okf-weight-normal: 400;
+  --okf-weight-medium: 550;
+  --okf-weight-bold: 680;
+
+  /* Space */
+  --okf-space-1: 0.25rem;
+  --okf-space-2: 0.5rem;
+  --okf-space-3: 0.75rem;
+  --okf-space-4: 1rem;
+  --okf-space-5: 1.5rem;
+  --okf-space-6: 2rem;
+  --okf-space-7: 3rem;
+  --okf-space-8: 4rem;
+
+  /* Shape */
+  --okf-radius-sm: 3px;
+  --okf-radius-md: 6px;
+  --okf-radius-lg: 10px;
+  --okf-radius-pill: 999px;
+  --okf-border-width: 1px;
+  --okf-shadow-sm: 0 1px 2px rgb(15 18 25 / 8%);
+  --okf-shadow-md: 0 12px 32px rgb(15 18 25 / 16%);
+
+  /* Layout */
+  --okf-sidebar-width: 17rem;
+  --okf-aside-width: 14rem;
+  --okf-content-max: 46rem;
+  --okf-layout-max: 96rem;
+  --okf-header-height: 3.25rem;
+  --okf-z-header: 10;
+  --okf-z-overlay: 100;
+
+  /* Colour */
+  --okf-color-bg: #ffffff;
+  --okf-color-surface: #f7f8fa;
+  --okf-color-surface-raised: #ffffff;
+  --okf-color-fg: #16181d;
+  --okf-color-muted: #5b6270;
+  --okf-color-subtle: #878e9c;
+  --okf-color-border: #e2e5ea;
+  --okf-color-border-strong: #c8cdd6;
+
+  --okf-color-accent: #2c5fd8;
+  --okf-color-accent-fg: #ffffff;
+  --okf-color-accent-soft: #eaf0fd;
+
+  --okf-color-danger: #b4232b;
+  --okf-color-danger-soft: #fdeced;
+  --okf-color-warning: #8a5a00;
+  --okf-color-warning-soft: #fdf3e0;
+  --okf-color-success: #1f6b45;
+  --okf-color-success-soft: #e8f5ee;
+  --okf-color-mark: #fdf0b8;
+
+  /* Graph palette, indexed by a hash of the concept `type`. */
+  --okf-graph-node-0: #2c5fd8;
+  --okf-graph-node-1: #1f8f7a;
+  --okf-graph-node-2: #a3532c;
+  --okf-graph-node-3: #7a4bbd;
+  --okf-graph-node-4: #b4232b;
+  --okf-graph-node-5: #2b7fb0;
+  --okf-graph-node-6: #7a7f1f;
+  --okf-graph-node-7: #c0468f;
+  --okf-graph-node-default: #878e9c;
+  --okf-graph-edge: #c8cdd6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-okf-theme='light']) {
+    --okf-color-bg: #101318;
+    --okf-color-surface: #161a21;
+    --okf-color-surface-raised: #1c212a;
+    --okf-color-fg: #e8eaee;
+    --okf-color-muted: #a2aab8;
+    --okf-color-subtle: #78808f;
+    --okf-color-border: #262c36;
+    --okf-color-border-strong: #3a424f;
+
+    --okf-color-accent: #7ba4ff;
+    --okf-color-accent-fg: #0d1017;
+    --okf-color-accent-soft: #1a2438;
+
+    --okf-color-danger: #ff9a9f;
+    --okf-color-danger-soft: #2e1a1c;
+    --okf-color-warning: #f0c076;
+    --okf-color-warning-soft: #2c2418;
+    --okf-color-success: #7fd3a5;
+    --okf-color-success-soft: #16261f;
+    --okf-color-mark: #5c4d17;
+
+    --okf-graph-node-0: #7ba4ff;
+    --okf-graph-node-1: #5fd3bb;
+    --okf-graph-node-2: #e0a173;
+    --okf-graph-node-3: #b79bf0;
+    --okf-graph-node-4: #ff9a9f;
+    --okf-graph-node-5: #7cc6ea;
+    --okf-graph-node-6: #ccd177;
+    --okf-graph-node-7: #f095c8;
+    --okf-graph-node-default: #78808f;
+    --okf-graph-edge: #333b47;
+
+    --okf-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --okf-shadow-md: 0 12px 32px rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-okf-theme='dark'] {
+  --okf-color-bg: #101318;
+  --okf-color-surface: #161a21;
+  --okf-color-surface-raised: #1c212a;
+  --okf-color-fg: #e8eaee;
+  --okf-color-muted: #a2aab8;
+  --okf-color-subtle: #78808f;
+  --okf-color-border: #262c36;
+  --okf-color-border-strong: #3a424f;
+
+  --okf-color-accent: #7ba4ff;
+  --okf-color-accent-fg: #0d1017;
+  --okf-color-accent-soft: #1a2438;
+
+  --okf-color-danger: #ff9a9f;
+  --okf-color-danger-soft: #2e1a1c;
+  --okf-color-warning: #f0c076;
+  --okf-color-warning-soft: #2c2418;
+  --okf-color-success: #7fd3a5;
+  --okf-color-success-soft: #16261f;
+  --okf-color-mark: #5c4d17;
+
+  --okf-graph-node-0: #7ba4ff;
+  --okf-graph-node-1: #5fd3bb;
+  --okf-graph-node-2: #e0a173;
+  --okf-graph-node-3: #b79bf0;
+  --okf-graph-node-4: #ff9a9f;
+  --okf-graph-node-5: #7cc6ea;
+  --okf-graph-node-6: #ccd177;
+  --okf-graph-node-7: #f095c8;
+  --okf-graph-node-default: #78808f;
+  --okf-graph-edge: #333b47;
+
+  --okf-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --okf-shadow-md: 0 12px 32px rgb(0 0 0 / 55%);
+}
