@@ -75,6 +75,7 @@ export type OkfSlotName =
   | 'sources'
   | 'search'
   | 'searchResults'
+  | 'referencesToggle'
   | 'graph'
   | 'footer';
 
@@ -86,6 +87,8 @@ export interface OkfFeatures {
   graph?: boolean;
   backlinks?: boolean;
   toc?: boolean;
+  /** Offer the control that hides provenance-only reference concepts. */
+  referenceToggle?: boolean;
 }
 
 export interface OkfConfig {

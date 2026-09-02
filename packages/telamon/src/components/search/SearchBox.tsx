@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from '../../router/context.js';
-import { useClassName, useSearch } from '../context.js';
+import { useClassName, useReferences, useSearch } from '../context.js';
 import { SearchResults } from './SearchResults.js';
 
 const LIMIT = 12;
@@ -45,7 +45,13 @@ export function SearchBox() {
   const listId = useId();
   const optionId = useCallback((index: number) => `${listId}-option-${index}`, [listId]);
 
-  const results = useSearch(open ? query : '', LIMIT);
+  const references = useReferences();
+  const results = useSearch(open ? query : '', { limit: LIMIT });
+  // Run the same query unfiltered so the reader is told when hiding references
+  // is the reason a match is missing, rather than being shown a bare "no
+  // matches" for something the bundle does contain.
+  const unfiltered = useSearch(open ? query : '', { limit: LIMIT, includeHidden: true });
+  const hiddenMatches = references.visible ? 0 : unfiltered.length - results.length;
 
   const close = useCallback(() => {
     setOpen(false);
@@ -147,6 +153,18 @@ export function SearchBox() {
                   onHover={setActiveIndex}
                 />
               )}
+              {hiddenMatches > 0 ? (
+                <p className="okf-search-hidden-note">
+                  {hiddenMatches} more in references.{' '}
+                  <button
+                    type="button"
+                    className="okf-search-hidden-show"
+                    onClick={() => references.setVisible(true)}
+                  >
+                    Show them
+                  </button>
+                </p>
+              ) : null}
             </div>
           </div>
         </div>

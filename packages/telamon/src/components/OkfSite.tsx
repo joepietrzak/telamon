@@ -1,13 +1,14 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { PluggableList } from 'unified';
 import { isBundle, parseBundle } from '../bundle/parse.js';
-import type { Bundle, BundleDiagnostic } from '../bundle/types.js';
+import { isReferenceDoc, referenceRoutes } from '../bundle/references.js';
+import type { Bundle, BundleDiagnostic, OkfDoc } from '../bundle/types.js';
 import { createHistoryRouter } from '../router/history.js';
 import { RouterProvider, useRoute } from '../router/context.js';
 import type { RouterAdapter } from '../router/types.js';
 import { Layout } from './Layout.js';
 import { OkfRoutes } from './OkfRoutes.js';
-import { OkfContextProvider } from './context.js';
+import { OkfContextProvider, type ReferencesState } from './context.js';
 import { DEFAULT_SLOTS } from './defaults.js';
 import type {
   MarkdownComponents,
@@ -44,6 +45,16 @@ export interface OkfSiteProps {
   graphRoute?: string;
   /** Clock for staleness checks. Defaults to the current time. */
   now?: Date;
+  /**
+   * Identifies provenance-only concepts that the references toggle hides.
+   * Defaults to anything under a `references/` directory.
+   */
+  isReference?: (doc: OkfDoc) => boolean;
+  /** Initial toggle state when uncontrolled. Defaults to showing references. */
+  defaultShowReferences?: boolean;
+  /** Controlled toggle state. Pair with `onShowReferencesChange`. */
+  showReferences?: boolean;
+  onShowReferencesChange?: (next: boolean) => void;
   /** Parse-time: keep raw HTML nodes. See `PipelineOptions`. Ignored for a parsed bundle. */
   allowHtml?: boolean;
   /** Parse-time. Memoize these; a new array each render re-parses the bundle. */
@@ -61,7 +72,10 @@ const DEFAULT_FEATURES: Required<OkfFeatures> = {
   graph: true,
   backlinks: true,
   toc: true,
+  referenceToggle: true,
 };
+
+const NO_ROUTES: ReadonlySet<string> = new Set();
 
 const EMPTY = {};
 
@@ -96,6 +110,10 @@ export function OkfProvider({
   typeColor,
   graphRoute = '/graph',
   now,
+  isReference = isReferenceDoc,
+  defaultShowReferences = true,
+  showReferences,
+  onShowReferencesChange,
   allowHtml,
   remarkPlugins,
   rehypePlugins,
@@ -161,13 +179,39 @@ export function OkfProvider({
     ],
   );
 
+  // Uncontrolled by default; `showReferences` takes over when supplied.
+  const [internalShowReferences, setInternalShowReferences] = useState(defaultShowReferences);
+  const referencesVisible = showReferences ?? internalShowReferences;
+  const setReferencesVisible = useCallback(
+    (next: boolean) => {
+      if (showReferences === undefined) setInternalShowReferences(next);
+      onShowReferencesChange?.(next);
+    },
+    [showReferences, onShowReferencesChange],
+  );
+
+  const referenceRouteSet = useMemo(
+    () => referenceRoutes(bundle, isReference),
+    [bundle, isReference],
+  );
+
+  const references = useMemo<ReferencesState>(
+    () => ({
+      available: referenceRouteSet.size > 0,
+      visible: referencesVisible,
+      setVisible: setReferencesVisible,
+      hidden: referencesVisible ? NO_ROUTES : referenceRouteSet,
+    }),
+    [referenceRouteSet, referencesVisible, setReferencesVisible],
+  );
+
   useEffect(() => {
     if (onDiagnostics) onDiagnostics(bundle.diagnostics);
   }, [bundle, onDiagnostics]);
 
   return (
     <RouterProvider router={router}>
-      <OkfContextProvider bundle={bundle} config={config}>
+      <OkfContextProvider bundle={bundle} config={config} references={references}>
         {onNavigate ? <NavigationReporter onNavigate={onNavigate} /> : null}
         {children}
       </OkfContextProvider>

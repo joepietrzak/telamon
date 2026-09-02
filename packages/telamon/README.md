@@ -106,8 +106,42 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Toc`
 - **Navigation** — a sidebar built from the directory tree, ordered by each `index.md`'s own link order and descriptions where present, alphabetical where not. Plus breadcrumbs and an on-page table of contents.
 - **Search** — a dependency-free index over titles, descriptions, tags, types, headings, and body text (code fences included: in a data bundle the SQL is often the thing worth finding). Opens with `/` or ⌘K. The index is built on first use, so a site that never searches never pays for it.
 - **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. The graph is code-split, so `d3-force` never lands in your main chunk, and it ships an equivalent text listing for keyboard and screen-reader use.
+- **A references toggle** — see below.
 
-Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false }}`.
+Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false }}`.
+
+## Hiding provenance-only concepts
+
+Bundles often carry concepts that exist only to hold source provenance for other concepts and say nothing substantive on their own. A sidebar checkbox hides them, along with their search results.
+
+Hiding is presentational. Those pages stay routable, links from other concepts still resolve, backlinks *from* them still show, and they stay in the concept graph — nothing becomes unreachable, it just stops competing for attention.
+
+By default a concept counts as a reference if it lives under a `references/` directory, at any depth. Bundles vary, so the rule is a prop:
+
+```tsx
+// by frontmatter type instead
+<OkfSite bundle={bundle} isReference={(doc) => doc.frontmatter.type === 'Reference'} />
+
+// or several types
+const PROVENANCE = new Set(['Reference', 'Citation', 'Source']);
+<OkfSite bundle={bundle} isReference={(doc) => PROVENANCE.has(doc.frontmatter.type ?? '')} />
+```
+
+Start with them hidden, or drive the state yourself:
+
+```tsx
+<OkfSite bundle={bundle} defaultShowReferences={false} />
+
+<OkfSite
+  bundle={bundle}
+  showReferences={show}                       // controlled
+  onShowReferencesChange={setShow}            // persist it wherever you like
+/>
+```
+
+When references are hidden and a search would have matched one, the dialog says so and offers to reveal them, rather than reporting no matches for something the bundle does contain.
+
+The control renders inside the sidebar region but outside the `Sidebar` slot, so replacing the sidebar keeps it. To place it yourself, render `<ReferencesToggle />` and read the state with `useReferences()`.
 
 ## Conformance and leniency
 
@@ -140,6 +174,10 @@ Unmodeled frontmatter keys are preserved verbatim on `doc.frontmatter.raw`. A ba
 | `typeColor` | `(type) => string \| undefined` | Graph node colour per concept type. |
 | `graphRoute` | `string` | Defaults to `/graph`. |
 | `now` | `Date` | Clock for staleness. Injectable for tests and demos. |
+| `isReference` | `(doc) => boolean` | What counts as provenance-only. Defaults to anything under `references/`. |
+| `defaultShowReferences` | `boolean` | Initial toggle state when uncontrolled. Defaults to `true`. |
+| `showReferences` | `boolean` | Controlled toggle state. |
+| `onShowReferencesChange` | `(next) => void` | Pairs with `showReferences`. |
 | `allowHtml`, `remarkPlugins`, `rehypePlugins` | | Parse-time; see below. Memoize the arrays. |
 | `onNavigate` | `(route) => void` | |
 | `onDiagnostics` | `(diagnostics) => void` | |
@@ -209,7 +247,7 @@ renderToString(<OkfSite bundle={bundle} router={createMemoryRouter(req.path)} />
 </OkfProvider>
 ```
 
-Hooks: `useOkfBundle`, `useOkfConfig`, `useDoc`, `useCurrentDoc`, `useNavTree`, `useBacklinks`, `useSearch`, `useRoute`, `useNavigate`. Lower-level pieces — `parseBundle`, `classifyHref`, `filePathToRoute`, `buildSearchIndex`, `Markdown`, `ConceptPage` — are all exported too.
+Hooks: `useOkfBundle`, `useOkfConfig`, `useDoc`, `useCurrentDoc`, `useNavTree`, `useBacklinks`, `useSearch`, `useReferences`, `useRoute`, `useNavigate`. `useNavTree` and `useSearch` already respect the references toggle, so custom chrome inherits it for free. Lower-level pieces — `parseBundle`, `classifyHref`, `filePathToRoute`, `buildSearchIndex`, `Markdown`, `ConceptPage` — are all exported too.
 
 ## Development
 

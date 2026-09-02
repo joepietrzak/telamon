@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRoute } from '../router/context.js';
+import { ReferencesToggle } from './ReferencesToggle.js';
 import { useClassName, useDoc, useNavTree, useOkfConfig } from './context.js';
 
 const MAIN_ID = 'okf-main';
@@ -78,6 +79,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className={bodyClassName}>
         <aside id={SIDEBAR_ID} className={sidebarClassName}>
+          {/* Outside the Sidebar slot, so replacing the sidebar keeps the control. */}
+          {features.referenceToggle ? <ReferencesToggle /> : null}
           <slots.Sidebar nodes={nodes} />
         </aside>
 
