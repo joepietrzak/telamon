@@ -1,6 +1,12 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OkfSite, createMemoryRouter, parseBundle, type OkfSiteProps } from '../src/index.js';
+import {
+  OkfSite,
+  createMemoryRouter,
+  parseBundle,
+  referenceRoutes,
+  type OkfSiteProps,
+} from '../src/index.js';
 import { readFixture } from './helpers.js';
 
 const edge = readFixture('edge');
@@ -158,5 +164,44 @@ describe('the concept page', () => {
       components: { Relationships: () => <p>custom relationships</p> },
     });
     expect(screen.getByText('custom relationships')).toBeInTheDocument();
+  });
+});
+
+describe('the demo bundle', () => {
+  const demo = parseBundle(readFixture('demo'));
+
+  it('parses clean, since it is what the playground shows first', () => {
+    expect(demo.diagnostics).toEqual([]);
+  });
+
+  it('declares typed relationships across several kinds', () => {
+    const typed = demo.graph.edges.filter((e) => e.directed);
+    expect(typed.length).toBeGreaterThan(15);
+    expect(new Set(typed.map((e) => e.type))).toEqual(
+      new Set([
+        'depends_on',
+        'derived_from',
+        'documented_by',
+        'joins_to',
+        'produced_by',
+        'writes_to',
+        'contradicts',
+      ]),
+    );
+  });
+
+  it('points its provenance concepts at a references/ tree the toggle can hide', () => {
+    const hidden = referenceRoutes(demo);
+    expect([...hidden].sort()).toEqual([
+      '/references',
+      '/references/analytics_style_guide',
+      '/references/finance_handbook',
+      '/references/order_schema_rfc',
+    ]);
+    // Every documented_by edge lands in that tree, so hiding it is a real test
+    // of relationships pointing at concepts the sidebar is not showing.
+    const documented = demo.graph.edges.filter((e) => e.type === 'documented_by');
+    expect(documented.length).toBeGreaterThan(0);
+    expect(documented.every((e) => hidden.has(e.target))).toBe(true);
   });
 });

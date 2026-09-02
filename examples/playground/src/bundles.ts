@@ -24,6 +24,12 @@ const edgeModules = import.meta.glob('../../../packages/telamon/test/fixtures/ed
   eager: true,
 }) as RawModules;
 
+const demoModules = import.meta.glob('../../../packages/telamon/test/fixtures/demo/**/*.md', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as RawModules;
+
 /** Strip the glob prefix so keys are bundle-relative, which is what OKF paths are. */
 function toBundle(modules: RawModules, name: string): Record<string, string> {
   const prefix = `${FIXTURES}${name}/`;
@@ -33,6 +39,10 @@ function toBundle(modules: RawModules, name: string): Record<string, string> {
 }
 
 export const BUNDLES = {
+  demo: {
+    label: 'Storefront analytics (typed relationships)',
+    files: toBundle(demoModules, 'demo'),
+  },
   ga4: {
     label: 'GA4 (reference bundle)',
     files: toBundle(ga4Modules, 'ga4'),

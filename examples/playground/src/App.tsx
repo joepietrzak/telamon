@@ -11,7 +11,7 @@ const THEMES = {
 type ThemeKey = keyof typeof THEMES;
 
 export function App() {
-  const [bundleKey, setBundleKey] = useState<BundleKey>('ga4');
+  const [bundleKey, setBundleKey] = useState<BundleKey>('demo');
   const [theme, setTheme] = useState<ThemeKey>('default');
   const [diagnostics, setDiagnostics] = useState<BundleDiagnostic[]>([]);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
