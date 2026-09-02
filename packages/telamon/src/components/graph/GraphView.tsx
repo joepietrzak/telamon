@@ -26,6 +26,8 @@ const HEIGHT = 620;
 /** Ticks run to completion up front: a settled static layout beats an animated one here. */
 const TICKS = 320;
 const PALETTE_SIZE = 8;
+/** Pointer travel, in px, before a press counts as a pan rather than a click. */
+const DRAG_THRESHOLD = 4;
 
 /** Stable index into the palette so a given concept type keeps its colour across renders. */
 function paletteIndex(type: string): number {
@@ -90,7 +92,16 @@ export default function GraphView() {
   const { nodes, links } = useMemo(() => layout(bundle), [bundle]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [hovered, setHovered] = useState<string | null>(null);
-  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    startX: number;
+    startY: number;
+    panning: boolean;
+  } | null>(null);
+  /** True once a press has travelled far enough to pan, so the click it ends with is ignored. */
+  const draggedRef = useRef(false);
 
   const colorFor = (type: string | undefined) => {
     if (!type) return 'var(--okf-graph-node-default, currentColor)';
@@ -112,15 +123,39 @@ export default function GraphView() {
       <svg
         className="okf-graph-canvas"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        role="img"
+        // Not role="img": that would collapse the graph into a single opaque
+        // image and hide the focusable nodes inside it.
+        role="group"
         aria-label="Force-directed graph of concepts and the links between them"
         onPointerDown={(event) => {
-          dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-          event.currentTarget.setPointerCapture(event.pointerId);
+          // Deliberately no setPointerCapture here. Capturing on press retargets
+          // the click that follows to this <svg>, so a node's own click handler
+          // never runs -- capture is taken below, only once a pan really starts.
+          dragRef.current = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            startX: event.clientX,
+            startY: event.clientY,
+            panning: false,
+          };
+          draggedRef.current = false;
         }}
         onPointerMove={(event) => {
           const drag = dragRef.current;
           if (!drag || drag.pointerId !== event.pointerId) return;
+
+          if (!drag.panning) {
+            const travelled = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+            // Written so a NaN travelled (an event with no coordinates) falls
+            // through to `return`: ambiguous input must not become a pan, or
+            // the click it swallows never reaches the node.
+            if (!(travelled > DRAG_THRESHOLD)) return;
+            drag.panning = true;
+            draggedRef.current = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }
+
           const dx = event.clientX - drag.x;
           const dy = event.clientY - drag.y;
           drag.x = event.clientX;
@@ -128,7 +163,15 @@ export default function GraphView() {
           setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
         }}
         onPointerUp={(event) => {
-          if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+          const drag = dragRef.current;
+          if (drag?.pointerId !== event.pointerId) return;
+          if (drag.panning && event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          dragRef.current = null;
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
         }}
         onWheel={(event) => {
           const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
@@ -162,9 +205,23 @@ export default function GraphView() {
                 key={node.route}
                 className={`okf-graph-node${isCurrent ? ' okf-graph-node--current' : ''}`}
                 transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}
+                role="button"
+                tabIndex={0}
+                aria-label={node.type ? `${node.label}, ${node.type}` : node.label}
                 onMouseEnter={() => setHovered(node.route)}
                 onMouseLeave={() => setHovered(null)}
-                onClick={() => navigate(node.route)}
+                onFocus={() => setHovered(node.route)}
+                onBlur={() => setHovered(null)}
+                onClick={() => {
+                  // Ignore the click that terminates a pan.
+                  if (draggedRef.current) return;
+                  navigate(node.route);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  navigate(node.route);
+                }}
               >
                 <circle r={radiusOf(node)} fill={colorFor(node.type)} />
                 <text className="okf-graph-label" x={radiusOf(node) + 5} y={4}>

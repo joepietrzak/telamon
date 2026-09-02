@@ -774,6 +774,15 @@ h6.okf-heading {
   cursor: pointer;
 }
 
+.okf-graph-node:focus {
+  outline: none;
+}
+
+.okf-graph-node:focus-visible circle {
+  stroke: var(--okf-color-accent, #2c5fd8);
+  stroke-width: 3;
+}
+
 .okf-graph-node circle {
   stroke: var(--okf-color-bg, #fff);
   stroke-width: 1.5;
