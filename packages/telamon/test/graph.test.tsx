@@ -41,6 +41,74 @@ function drag(canvas: Element, distance: number) {
   pointer(canvas, 'pointerup', 100 + distance, 100);
 }
 
+/** The inner <g> carries the pan/zoom transform. */
+const transformOf = (canvas: Element) =>
+  canvas.querySelector('g')?.getAttribute('transform') ?? '';
+
+const scaleOf = (canvas: Element) => Number(/scale\(([-\d.e]+)\)/.exec(transformOf(canvas))?.[1]);
+
+function wheel(canvas: Element, deltaY?: number) {
+  // A plain Event carries no deltaY at all, which is the realistic stand-in for
+  // an event arriving without usable delta information.
+  const event =
+    deltaY === undefined
+      ? new Event('wheel', { bubbles: true })
+      : new WheelEvent('wheel', { deltaY, bubbles: true });
+  fireEvent(canvas, event);
+}
+
+describe('pan and zoom', () => {
+  it('zooms in and out within bounds', async () => {
+    const { canvas } = await renderGraph();
+    expect(scaleOf(canvas)).toBeCloseTo(1);
+
+    wheel(canvas, -100);
+    expect(scaleOf(canvas)).toBeGreaterThan(1);
+
+    wheel(canvas, 100);
+    expect(scaleOf(canvas)).toBeCloseTo(1);
+  });
+
+  it('clamps rather than running away', async () => {
+    const { canvas } = await renderGraph();
+    for (let i = 0; i < 40; i += 1) wheel(canvas, -100);
+    expect(scaleOf(canvas)).toBeCloseTo(4);
+
+    for (let i = 0; i < 80; i += 1) wheel(canvas, 100);
+    expect(scaleOf(canvas)).toBeCloseTo(0.3);
+  });
+
+  it('ignores a wheel event with no usable delta', async () => {
+    const { canvas } = await renderGraph();
+    const before = transformOf(canvas);
+
+    wheel(canvas); // no deltaY at all
+    wheel(canvas, 0); // horizontal-only scroll
+
+    expect(transformOf(canvas)).toBe(before);
+    expect(scaleOf(canvas)).toBeCloseTo(1);
+  });
+
+  it('pans, and never lets a coordinate-less event poison the transform', async () => {
+    const { canvas } = await renderGraph();
+
+    pointer(canvas, 'pointerdown', 100, 100);
+    pointer(canvas, 'pointermove', 160, 130);
+    expect(transformOf(canvas)).toContain('translate(60 30)');
+
+    // Mid-pan event with no coordinates: must be ignored, not turn the
+    // transform into NaN for the rest of the session.
+    fireEvent(canvas, new Event('pointermove', { bubbles: true }));
+    expect(transformOf(canvas)).toContain('translate(60 30)');
+
+    // Panning still works afterwards.
+    pointer(canvas, 'pointermove', 170, 130);
+    pointer(canvas, 'pointerup', 170, 130);
+    expect(transformOf(canvas)).toContain('translate(70 30)');
+    expect(transformOf(canvas)).not.toContain('NaN');
+  });
+});
+
 describe('graph node navigation', () => {
   it('navigates when a node is clicked', async () => {
     const user = userEvent.setup();

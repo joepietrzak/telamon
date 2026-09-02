@@ -28,12 +28,19 @@ const TICKS = 320;
 const PALETTE_SIZE = 8;
 /** Pointer travel, in px, before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 4;
+const ZOOM_STEP = 1.12;
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 4;
 
 /** Stable index into the palette so a given concept type keeps its colour across renders. */
 function paletteIndex(type: string): number {
   let hash = 0;
   for (let i = 0; i < type.length; i += 1) hash = (hash * 31 + type.charCodeAt(i)) | 0;
   return Math.abs(hash) % PALETTE_SIZE;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function radiusOf(node: SimNode): number {
@@ -158,6 +165,9 @@ export default function GraphView() {
 
           const dx = event.clientX - drag.x;
           const dy = event.clientY - drag.y;
+          // One coordinate-less event mid-pan would put NaN into the transform,
+          // and nothing later would ever bring it back.
+          if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
           drag.x = event.clientX;
           drag.y = event.clientY;
           setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
@@ -174,11 +184,15 @@ export default function GraphView() {
           dragRef.current = null;
         }}
         onWheel={(event) => {
-          const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-          setView((current) => ({
-            ...current,
-            scale: Math.min(4, Math.max(0.3, current.scale * factor)),
-          }));
+          // No usable delta is not a zoom. This rejects NaN and a missing
+          // deltaY as well as 0, which a horizontal-only scroll reports --
+          // the old `deltaY < 0` test quietly read all three as "zoom out".
+          if (!Number.isFinite(event.deltaY) || event.deltaY === 0) return;
+          const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+          setView((current) => {
+            const scale = clamp(current.scale * factor, MIN_SCALE, MAX_SCALE);
+            return Number.isFinite(scale) ? { ...current, scale } : current;
+          });
         }}
       >
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
