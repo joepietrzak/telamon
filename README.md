@@ -4,7 +4,7 @@ A TypeScript library that renders a [Google Open Knowledge Format](https://githu
 
 Bring your own design tokens; every visual value is a `--okf-*` custom property.
 
-- **[`packages/telamon`](./packages/telamon)** — the library. See its [README](./packages/telamon/README.md) for the API.
+- **[`packages/telamon`](./packages/telamon)** — the library. Start with the [getting-started guide](./packages/telamon/docs/getting-started.md); the [README](./packages/telamon/README.md) is the API reference.
 - **[`examples/playground`](./examples/playground)** — a Vite demo with two bundles, three token themes, and live diagnostics.
 
 ```bash

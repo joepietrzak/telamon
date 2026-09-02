@@ -8,7 +8,8 @@
     "*.css"
   ],
   "files": [
-    "dist"
+    "dist",
+    "docs"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

@@ -14,6 +14,8 @@ npm install telamon
 
 `react` and `react-dom` (>= 18) are peer dependencies.
 
+**New here? Start with the [getting-started guide](./docs/getting-started.md)** — a walkthrough from loading a bundle to theming and serving it. This README is the reference.
+
 ## Quick start
 
 ```tsx
