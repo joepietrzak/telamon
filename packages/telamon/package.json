@@ -1,6 +1,6 @@
 {
   "name": "telamon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Render a Google Open Knowledge Format (OKF) bundle as a React single-page app.",
   "license": "MIT",
   "type": "module",
