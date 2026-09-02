@@ -21,6 +21,7 @@ export type {
   OkfDoc,
   OkfFrontmatter,
   OkfSourceRef,
+  Relationship,
   OkfStatus,
   TrustTier,
   UsageWindow,
@@ -55,6 +56,11 @@ export {
 } from './bundle/paths.js';
 
 export { breadcrumbTrail, buildNavTree, humanize } from './bundle/tree.js';
+export {
+  RELATIONSHIPS_KEY,
+  readRawRelationships,
+  resolveRelationships,
+} from './bundle/relationships.js';
 export {
   REFERENCE_DIRECTORY,
   filterNavTree,
@@ -115,6 +121,7 @@ export { DEFAULT_SLOTS } from './components/defaults.js';
 export { Breadcrumbs } from './components/Breadcrumbs.js';
 export { Toc } from './components/Toc.js';
 export { Backlinks } from './components/Backlinks.js';
+export { Relationships, formatRelationshipType } from './components/Relationships.js';
 export { ReferencesToggle } from './components/ReferencesToggle.js';
 export { SearchBox } from './components/search/SearchBox.js';
 export { SearchResults, type SearchResultsProps } from './components/search/SearchResults.js';

@@ -5,20 +5,18 @@ import { OkfSite, createMemoryRouter, type MemoryRouter } from '../src/index.js'
 import { readFixture } from './helpers.js';
 
 const ga4 = readFixture('ga4');
+const edge = readFixture('edge');
 
 afterEach(cleanup);
 
-async function renderGraph(): Promise<{ router: MemoryRouter; canvas: SVGElement }> {
+async function renderGraph(
+  files: Record<string, string> = ga4,
+): Promise<{ router: MemoryRouter; canvas: SVGElement }> {
   const router = createMemoryRouter('/graph');
-  render(<OkfSite bundle={ga4} router={router} />);
-  // The graph is a lazy chunk. The default 1s findBy timeout is enough on an
-  // idle machine but not when the suite shares a CPU with a typecheck or build,
-  // so give Suspense room rather than leaving a flaky test in the suite.
-  const canvas = await screen.findByRole(
-    'group',
-    { name: /Force-directed graph/ },
-    { timeout: 10_000 },
-  );
+  render(<OkfSite bundle={files} router={router} />);
+  // The graph is a lazy chunk; test/setup.ts raises the global findBy ceiling
+  // so resolving it under load does not race the default 1s timeout.
+  const canvas = await screen.findByRole('group', { name: /Force-directed graph/ });
   return { router, canvas: canvas as unknown as SVGElement };
 }
 
@@ -160,5 +158,51 @@ describe('graph node navigation', () => {
       'href',
       '/tables/events_',
     );
+  });
+});
+
+describe('typed relationship edges', () => {
+  it('draws untyped body links without direction or a label', async () => {
+    const { canvas } = await renderGraph();
+    expect(canvas.querySelectorAll('.okf-graph-edge').length).toBeGreaterThan(0);
+    expect(canvas.querySelectorAll('.okf-graph-edge--typed')).toHaveLength(0);
+    expect(canvas.querySelectorAll('.okf-graph-edge-label')).toHaveLength(0);
+    for (const edgePath of canvas.querySelectorAll('.okf-graph-edge')) {
+      expect(edgePath.getAttribute('marker-end')).toBeNull();
+    }
+  });
+
+  it('draws a relationship as a labelled, arrow-headed edge', async () => {
+    const { canvas } = await renderGraph(edge);
+
+    const typed = [...canvas.querySelectorAll('.okf-graph-edge--typed')];
+    expect(typed.length).toBeGreaterThan(0);
+    expect(typed.every((edgePath) => edgePath.getAttribute('marker-end')?.startsWith('url(#'))).toBe(
+      true,
+    );
+
+    const labels = [...canvas.querySelectorAll('.okf-graph-edge-label')].map((n) => n.textContent);
+    expect(labels).toContain('depends_on');
+    expect(labels).toContain('derived_from');
+  });
+
+  it('bows parallel edges apart instead of stacking them', async () => {
+    const { canvas } = await renderGraph(edge);
+    const curved = [...canvas.querySelectorAll('.okf-graph-edge')].filter((edgePath) =>
+      edgePath.getAttribute('d')?.includes('Q'),
+    );
+    // /relationships and /loose/thing are joined by three edges. Offsets are
+    // symmetric about zero, so the middle of an odd group stays straight and
+    // the two either side bow away from it.
+    expect(curved.length).toBeGreaterThanOrEqual(2);
+
+    const all = [...canvas.querySelectorAll('.okf-graph-edge')].map((e) => e.getAttribute('d'));
+    expect(new Set(all).size).toBe(all.length); // nothing drawn on top of anything else
+    expect(all.every((d) => d && !d.includes('NaN'))).toBe(true);
+  });
+
+  it('renders an arrowhead marker definition', async () => {
+    const { canvas } = await renderGraph(edge);
+    expect(canvas.querySelectorAll('marker')).toHaveLength(2);
   });
 });

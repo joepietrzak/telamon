@@ -93,6 +93,7 @@
   --okf-graph-node-7: #c0468f;
   --okf-graph-node-default: #878e9c;
   --okf-graph-edge: #c8cdd6;
+  --okf-graph-edge-typed: #9aa2b1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -128,6 +129,7 @@
     --okf-graph-node-7: #f095c8;
     --okf-graph-node-default: #78808f;
     --okf-graph-edge: #333b47;
+    --okf-graph-edge-typed: #4a5361;
 
     --okf-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
     --okf-shadow-md: 0 12px 32px rgb(0 0 0 / 55%);
@@ -166,6 +168,7 @@
   --okf-graph-node-7: #f095c8;
   --okf-graph-node-default: #78808f;
   --okf-graph-edge: #333b47;
+  --okf-graph-edge-typed: #4a5361;
 
   --okf-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
   --okf-shadow-md: 0 12px 32px rgb(0 0 0 / 55%);

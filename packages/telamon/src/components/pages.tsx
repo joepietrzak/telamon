@@ -16,6 +16,7 @@ export function ConceptPage({ doc }: { doc: ConceptDoc }) {
         <div className="okf-prose">
           <Markdown doc={doc} />
         </div>
+        <slots.Relationships doc={doc} />
         <slots.SourcesList doc={doc} />
         <ConceptFooter doc={doc} />
         {features.backlinks ? <slots.Backlinks route={doc.route} /> : null}

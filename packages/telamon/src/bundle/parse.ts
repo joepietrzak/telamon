@@ -8,6 +8,11 @@ import {
 import { collectLinks, parseIndexEntries } from './links.js';
 import { parseFrontmatter } from './frontmatter.js';
 import {
+  RELATIONSHIPS_KEY,
+  readRawRelationships,
+  resolveRelationships,
+} from './relationships.js';
+import {
   dirOf,
   filePathToRoute,
   isMarkdownPath,
@@ -102,6 +107,11 @@ export function parseBundle(files: Record<string, string>, options: ParseOptions
       }
     }
 
+    frontmatter.relationships = resolveRelationships(
+      readRawRelationships(frontmatter.raw[RELATIONSHIPS_KEY], filePath, diagnostics),
+      { dir, filePath, hasFile, diagnostics },
+    );
+
     const hast = markdownToHast(processor, body);
     const headings = collectHeadings(hast);
     const links = collectLinks(hast, {
@@ -194,9 +204,40 @@ export function parseBundle(files: Record<string, string>, options: ParseOptions
       }
       backlinks.set(link.route, refs);
 
-      edges.push({ source: doc.route, target: link.route });
+      edges.push({ source: doc.route, target: link.route, directed: false });
       bump(doc.route);
       bump(link.route);
+    }
+
+    // Typed relationships are links too: they earn a backlink and a graph edge,
+    // and unlike a prose link they carry a direction and a name.
+    for (const relationship of doc.frontmatter.relationships) {
+      if (relationship.broken || relationship.external || !relationship.route) continue;
+      if (relationship.route === doc.route) continue;
+      const target = byRoute.get(relationship.route);
+      if (!target) continue;
+
+      const refs = backlinks.get(relationship.route) ?? [];
+      const existing = refs.find((ref) => ref.route === doc.route);
+      if (existing) {
+        // A typed relationship is the more informative label, so it wins.
+        if (relationship.type && !existing.relationship) existing.relationship = relationship.type;
+      } else {
+        const ref: DocRef = { route: doc.route, title: doc.title };
+        if (doc.frontmatter.type) ref.type = doc.frontmatter.type;
+        if (relationship.type) ref.relationship = relationship.type;
+        refs.push(ref);
+      }
+      backlinks.set(relationship.route, refs);
+
+      edges.push({
+        source: doc.route,
+        target: relationship.route,
+        ...(relationship.type && { type: relationship.type }),
+        directed: true,
+      });
+      bump(doc.route);
+      bump(relationship.route);
     }
   }
 

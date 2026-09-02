@@ -541,7 +541,8 @@ h6.okf-heading {
 }
 
 .okf-sources,
-.okf-backlinks {
+.okf-backlinks,
+.okf-relationships {
   margin-top: var(--okf-space-6, 2rem);
   padding-top: var(--okf-space-4, 1rem);
   border-top: var(--okf-border-width, 1px) solid var(--okf-color-border, #e2e5ea);
@@ -549,6 +550,7 @@ h6.okf-heading {
 
 .okf-source-list,
 .okf-backlink-list,
+.okf-relationship-list,
 .okf-listing {
   display: flex;
   flex-direction: column;
@@ -560,11 +562,28 @@ h6.okf-heading {
 
 .okf-source,
 .okf-backlink,
+.okf-relationship,
 .okf-listing-item {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--okf-space-2, 0.5rem);
+}
+
+.okf-relationship-type {
+  flex: none;
+  min-width: 8rem;
+  font-size: var(--okf-text-xs, 0.75rem);
+  font-variant: all-small-caps;
+  letter-spacing: 0.04em;
+  color: var(--okf-color-muted, #5b6270);
+}
+
+.okf-relationship-description {
+  flex-basis: 100%;
+  margin-left: 8rem;
+  font-size: var(--okf-text-xs, 0.75rem);
+  color: var(--okf-color-subtle, #878e9c);
 }
 
 .okf-source-meta,
@@ -765,9 +784,38 @@ h6.okf-heading {
   stroke-width: 1;
 }
 
+.okf-graph-edge--typed {
+  stroke: var(--okf-graph-edge-typed, var(--okf-color-border-strong, #c8cdd6));
+  stroke-width: 1.25;
+}
+
 .okf-graph-edge--active {
   stroke: var(--okf-color-accent, #2c5fd8);
   stroke-width: 2;
+}
+
+.okf-graph-arrow {
+  fill: var(--okf-graph-edge-typed, var(--okf-color-border-strong, #c8cdd6));
+}
+
+.okf-graph-arrow-active {
+  fill: var(--okf-color-accent, #2c5fd8);
+}
+
+.okf-graph-edge-label {
+  font-size: 8px;
+  font-variant: all-small-caps;
+  letter-spacing: 0.04em;
+  fill: var(--okf-color-subtle, #878e9c);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--okf-color-surface, #f7f8fa);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.okf-graph-edge-label--active {
+  fill: var(--okf-color-accent, #2c5fd8);
 }
 
 .okf-graph-node {

@@ -140,6 +140,7 @@ export function emptyFrontmatter(): OkfFrontmatter {
     sourcesById: new Map(),
     verified: [],
     status: 'stable',
+    relationships: [],
     raw: {},
   };
 }
@@ -210,6 +211,8 @@ export function parseFrontmatter(
     status: toStatus(record.status),
     staleAfter: asString(record.stale_after),
     okfVersion: asString(record.okf_version),
+    // Resolved in parseBundle, which is where the file set is known.
+    relationships: [],
     raw: record,
   };
 

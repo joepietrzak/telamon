@@ -5,6 +5,7 @@ import { NavTree } from './NavTree.js';
 import { Toc } from './Toc.js';
 import { ConceptHeader, SourcesList } from './metadata.js';
 import { NotFound } from './pages.js';
+import { Relationships } from './Relationships.js';
 import { SearchBox } from './search/SearchBox.js';
 import type { ResolvedSlots } from './slots.js';
 
@@ -20,6 +21,7 @@ export const DEFAULT_SLOTS: ResolvedSlots = {
   Breadcrumbs,
   ConceptHeader,
   SourcesList,
+  Relationships,
   Toc,
   Backlinks,
   SearchBox,

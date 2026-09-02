@@ -44,6 +44,7 @@ export interface OkfSlots {
   Breadcrumbs: ComponentType<BreadcrumbsProps>;
   ConceptHeader: ComponentType<ConceptChromeProps>;
   SourcesList: ComponentType<ConceptChromeProps>;
+  Relationships: ComponentType<ConceptChromeProps>;
   Toc: ComponentType<DocChromeProps>;
   Backlinks: ComponentType<BacklinksProps>;
   SearchBox: ComponentType<Record<string, never>>;
@@ -72,6 +73,7 @@ export type OkfSlotName =
   | 'metaRow'
   | 'toc'
   | 'backlinks'
+  | 'relationships'
   | 'sources'
   | 'search'
   | 'searchResults'

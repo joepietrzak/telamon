@@ -185,7 +185,7 @@ Each entry is *merged with* the default `okf-*` class, not swapped for it:
 <OkfSite bundle={bundle} classNames={{ main: 'prose lg:prose-lg', sidebar: 'text-sm' }} />
 ```
 
-Named regions: `root`, `header`, `headerTitle`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
+Named regions: `root`, `header`, `headerTitle`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `relationships`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
 
 ### Slots (when the markup itself has to change)
 
@@ -199,7 +199,7 @@ const slots = {
 <OkfSite bundle={bundle} components={slots} markdownComponents={{ blockquote: Callout }} />;
 ```
 
-Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Toc`, `Backlinks`, `SearchBox`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
+Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
 
 ---
 
@@ -244,6 +244,19 @@ const [show, setShow] = useState(() => localStorage.getItem('refs') !== 'off');
   }}
 />;
 ```
+
+### Saying how concepts relate
+
+OKF cross-links are untyped, so the graph can only show that two concepts are connected. To say *how*, add a `relationships` block to a concept's frontmatter:
+
+```yaml
+relationships:
+  - type: depends_on
+    target: /tables/events_.md
+    description: Reads the raw event stream.
+```
+
+Targets use the same forms as any OKF link. Each entry becomes a labelled, arrow-headed edge in the graph, a row in the page's Relationships section, and a backlink on the target — no configuration needed. Unresolvable targets report as `broken-relationship` diagnostics rather than breaking the page.
 
 ### Syntax highlighting
 
@@ -338,7 +351,7 @@ if (problems.length > 0) {
 }
 ```
 
-Codes: `missing-type`, `invalid-frontmatter`, `frontmatter-on-reserved-file`, `broken-link`, `unresolved-index-entry`, `route-collision`, `unsupported-okf-version`.
+Codes: `missing-type`, `invalid-frontmatter`, `frontmatter-on-reserved-file`, `broken-link`, `unresolved-index-entry`, `route-collision`, `unsupported-okf-version`, `broken-relationship`, `invalid-relationship`.
 
 ---
 
@@ -354,4 +367,5 @@ Codes: `missing-type`, `invalid-frontmatter`, `frontmatter-on-reserved-file`, `b
 | A custom slot loses its state | It's defined inline in render. Move it to module scope. |
 | Code blocks are unstyled | No `highlightCode` — none ships by default. |
 | A page you expect is missing from the nav | It may be a reference concept and the toggle is off. |
+| A `relationships` entry does not appear | Check `onDiagnostics` for `broken-relationship` (target not in the bundle) or `invalid-relationship` (entry is not a mapping, or has no `target`). |
 | `remarkPlugins` / `rehypePlugins` seem to re-parse constantly | Those arrays need a stable identity too. |

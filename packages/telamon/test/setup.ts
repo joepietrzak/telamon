@@ -1,4 +1,13 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/dom';
+
+// The suite runs several jsdom workers in parallel, often alongside a typecheck
+// or a build, and some waits here do real work under the hood: resolving the
+// graph's lazy chunk, or building the search index over the whole fixture on
+// the first keystroke. The 1s default is comfortable on an idle machine and not
+// otherwise, which showed up as failures that would not reproduce. This is a
+// ceiling, not a delay -- a passing assertion still returns immediately.
+configure({ asyncUtilTimeout: 5000 });
 
 // jsdom implements neither of these; the layout calls them on every navigation.
 window.scrollTo = () => {};

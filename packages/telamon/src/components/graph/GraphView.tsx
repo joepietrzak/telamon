@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import {
   forceCenter,
   forceCollide,
@@ -19,7 +19,14 @@ interface SimNode extends SimulationNodeDatum {
   degree: number;
 }
 
-type SimLink = SimulationLinkDatum<SimNode>;
+interface SimLink extends SimulationLinkDatum<SimNode> {
+  /** Relationship type, for typed edges declared in frontmatter. */
+  type?: string;
+  directed: boolean;
+  /** Position among the edges sharing this node pair, so parallel edges fan out. */
+  parallel: number;
+  parallelCount: number;
+}
 
 const WIDTH = 900;
 const HEIGHT = 620;
@@ -29,6 +36,8 @@ const PALETTE_SIZE = 8;
 /** Pointer travel, in px, before a press counts as a pan rather than a click. */
 const DRAG_THRESHOLD = 4;
 const ZOOM_STEP = 1.12;
+/** Perpendicular offset between edges joining the same pair of nodes. */
+const PARALLEL_SPREAD = 26;
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 4;
 
@@ -58,14 +67,46 @@ function layout(bundle: Bundle): { nodes: SimNode[]; links: SimLink[] } {
   const byRoute = new Map(nodes.map((node) => [node.route, node]));
   const seen = new Set<string>();
   const links: SimLink[] = [];
+
   for (const edge of bundle.graph.edges) {
-    // The graph is undirected for layout purposes; collapse reciprocal pairs.
-    const key = [edge.source, edge.target].sort().join(' ');
+    // An untyped body link says only "these are connected", so reciprocal pairs
+    // collapse into one line. A typed relationship names a direction, so
+    // `A depends_on B` and `B depends_on A` are two distinct edges.
+    const key = edge.directed
+      ? `${edge.source}\u0000${edge.target}\u0000${edge.type ?? ''}`
+      : [edge.source, edge.target].sort().join('\u0000');
     if (seen.has(key)) continue;
     seen.add(key);
+
     const source = byRoute.get(edge.source);
     const target = byRoute.get(edge.target);
-    if (source && target) links.push({ source, target });
+    if (!source || !target) continue;
+    links.push({
+      source,
+      target,
+      ...(edge.type && { type: edge.type }),
+      directed: edge.directed,
+      parallel: 0,
+      parallelCount: 1,
+    });
+  }
+
+  // Fan out edges that join the same pair, so they do not draw on top of
+  // each other and their labels stay readable.
+  const groups = new Map<string, SimLink[]>();
+  for (const link of links) {
+    const pair = [(link.source as SimNode).route, (link.target as SimNode).route]
+      .sort()
+      .join('\u0000');
+    const group = groups.get(pair);
+    if (group) group.push(link);
+    else groups.set(pair, [link]);
+  }
+  for (const group of groups.values()) {
+    group.forEach((link, index) => {
+      link.parallel = index;
+      link.parallelCount = group.length;
+    });
   }
 
   const simulation = forceSimulation(nodes)
@@ -82,6 +123,53 @@ function layout(bundle: Bundle): { nodes: SimNode[]; links: SimLink[] } {
   return { nodes, links };
 }
 
+interface EdgeGeometry {
+  d: string;
+  labelX: number;
+  labelY: number;
+}
+
+/**
+ * Path for one edge, trimmed to stop at each node's rim so an arrowhead is not
+ * buried under the target circle, and bowed aside when edges run in parallel.
+ */
+function edgeGeometry(link: SimLink): EdgeGeometry {
+  const source = link.source as SimNode;
+  const target = link.target as SimNode;
+  const sx = source.x ?? 0;
+  const sy = source.y ?? 0;
+  const tx = target.x ?? 0;
+  const ty = target.y ?? 0;
+
+  const length = Math.hypot(tx - sx, ty - sy) || 1;
+  const ux = (tx - sx) / length;
+  const uy = (ty - sy) / length;
+
+  const x1 = sx + ux * (radiusOf(source) + 2);
+  const y1 = sy + uy * (radiusOf(source) + 2);
+  const x2 = tx - ux * (radiusOf(target) + (link.directed ? 9 : 2));
+  const y2 = ty - uy * (radiusOf(target) + (link.directed ? 9 : 2));
+
+  const offset =
+    link.parallelCount > 1
+      ? (link.parallel - (link.parallelCount - 1) / 2) * PARALLEL_SPREAD
+      : 0;
+
+  if (offset === 0) {
+    return { d: `M ${x1} ${y1} L ${x2} ${y2}`, labelX: (x1 + x2) / 2, labelY: (y1 + y2) / 2 };
+  }
+
+  // Quadratic control point pushed along the perpendicular; the curve's
+  // midpoint sits half way to it, which is where the label goes.
+  const cx = (x1 + x2) / 2 - uy * offset;
+  const cy = (y1 + y2) / 2 + ux * offset;
+  return {
+    d: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`,
+    labelX: 0.25 * x1 + 0.5 * cx + 0.25 * x2,
+    labelY: 0.25 * y1 + 0.5 * cy + 0.25 * y2,
+  };
+}
+
 /**
  * A force-directed view of the bundle's cross-links.
  *
@@ -96,6 +184,7 @@ export default function GraphView() {
   const { route } = useRoute();
   const navigate = useNavigate();
 
+  const markerPrefix = useId().replace(/:/g, '');
   const { nodes, links } = useMemo(() => layout(bundle), [bundle]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [hovered, setHovered] = useState<string | null>(null);
@@ -195,21 +284,60 @@ export default function GraphView() {
           });
         }}
       >
+        <defs>
+          {['arrow', 'arrow-active'].map((name) => (
+            <marker
+              key={name}
+              id={`${markerPrefix}-${name}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" className={`okf-graph-${name}`} />
+            </marker>
+          ))}
+        </defs>
+
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
           {links.map((link, index) => {
             const source = link.source as SimNode;
             const target = link.target as SimNode;
             const touchesHover =
               hovered !== null && (source.route === hovered || target.route === hovered);
+            const { d, labelX, labelY } = edgeGeometry(link);
+            const marker = touchesHover ? 'arrow-active' : 'arrow';
+
             return (
-              <line
-                key={index}
-                className={`okf-graph-edge${touchesHover ? ' okf-graph-edge--active' : ''}`}
-                x1={source.x ?? 0}
-                y1={source.y ?? 0}
-                x2={target.x ?? 0}
-                y2={target.y ?? 0}
-              />
+              <g key={index} className="okf-graph-edge-group">
+                <path
+                  className={[
+                    'okf-graph-edge',
+                    link.directed && 'okf-graph-edge--typed',
+                    touchesHover && 'okf-graph-edge--active',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  d={d}
+                  fill="none"
+                  markerEnd={link.directed ? `url(#${markerPrefix}-${marker})` : undefined}
+                />
+                {link.type ? (
+                  <text
+                    className={`okf-graph-edge-label${
+                      touchesHover ? ' okf-graph-edge-label--active' : ''
+                    }`}
+                    x={labelX}
+                    y={labelY}
+                    textAnchor="middle"
+                    dy="-3"
+                  >
+                    {link.type}
+                  </text>
+                ) : null}
+              </g>
             );
           })}
           {nodes.map((node) => {

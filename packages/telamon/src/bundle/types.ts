@@ -42,6 +42,28 @@ export interface Attestation {
   at?: string;
 }
 
+/**
+ * A typed edge declared in frontmatter, e.g. `A depends_on B`.
+ *
+ * Not part of the OKF spec, which gives cross-links no semantics of their own
+ * (SPEC §6) -- but the spec forbids rejecting unknown frontmatter keys, so a
+ * bundle is free to carry these and a consumer is free to use them.
+ */
+export interface Relationship {
+  /** Kind as authored, e.g. `depends_on`. Not registered or validated. */
+  type?: string;
+  /** Target exactly as authored. */
+  target: string;
+  description?: string;
+  /** Bundle-relative path of the target, for in-bundle targets. */
+  path?: string;
+  /** Route of the target, for in-bundle targets. */
+  route?: string;
+  external: boolean;
+  /** True when an in-bundle target does not exist. */
+  broken: boolean;
+}
+
 export interface UsageWindow {
   from?: string;
   to?: string;
@@ -70,6 +92,8 @@ export interface OkfFrontmatter {
   staleAfter?: string;
   /** Only meaningful on the bundle-root `index.md` (SPEC §12). */
   okfVersion?: string;
+  /** Typed edges from the non-standard `relationships` key, resolved against the bundle. */
+  relationships: Relationship[];
   /** Every key exactly as authored, including ones this library does not model. */
   raw: Record<string, unknown>;
 }
@@ -145,6 +169,8 @@ export interface DocRef {
   route: string;
   title: string;
   type?: string;
+  /** Set when the reference came from a typed `relationships` entry rather than a body link. */
+  relationship?: string;
 }
 
 export type NavNodeKind = 'concept' | 'directory' | 'log';
@@ -170,6 +196,10 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
+  /** Relationship type, when the edge came from a `relationships` entry. */
+  type?: string;
+  /** Typed relationships are directed; a plain body link carries no direction. */
+  directed: boolean;
 }
 
 export type DiagnosticCode =
@@ -179,7 +209,9 @@ export type DiagnosticCode =
   | 'broken-link'
   | 'unresolved-index-entry'
   | 'route-collision'
-  | 'unsupported-okf-version';
+  | 'unsupported-okf-version'
+  | 'broken-relationship'
+  | 'invalid-relationship';
 
 export interface BundleDiagnostic {
   code: DiagnosticCode;
