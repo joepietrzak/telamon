@@ -1,0 +1,317 @@
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { archiveFileName, zipFiles } from '../bundle/archive.js';
+import { parseBundle } from '../bundle/parse.js';
+import { hrefToRoute } from '../bundle/paths.js';
+import type { Bundle, BundleDiagnostic, OkfDoc } from '../bundle/types.js';
+import { Layout } from '../components/Layout.js';
+import { OkfProvider, OkfSite, type OkfSiteProps } from '../components/OkfSite.js';
+import GraphView from '../components/graph/GraphView.js';
+import type { OkfFeatures, OkfSlots } from '../components/slots.js';
+import { createHistoryRouter } from '../router/history.js';
+import type { BundleSource, SourceDiagnostic } from '../source/types.js';
+import {
+  ServerDownloadLink,
+  ServerReferencesToggle,
+  ServerSearchBox,
+  SearchResultsPage,
+  type ServerChromeUrls,
+} from './chrome.js';
+import { renderDocument } from './document.js';
+import { ASSET_PREFIX, ENHANCE_SCRIPT_ID, ROOT_ELEMENT_ID, type EnhancePayload } from './ids.js';
+import { searchBundle } from './search.js';
+
+const SEARCH_LIMIT = 20;
+
+export interface BundleHandlerOptions {
+  /** Where the bundle comes from: a directory, a database, anything. */
+  source: BundleSource;
+  /** Site title. Defaults to the bundle root's own. */
+  title?: string;
+  /** Sub-path the site is mounted at, e.g. `/docs`. */
+  basename?: string;
+  features?: OkfFeatures;
+  graphRoute?: string;
+  /** Route the server renders search results at. Defaults to `/search`. */
+  searchRoute?: string;
+  /** Where the endpoints and scripts live. Defaults to `/_telamon`. */
+  assetPrefix?: string;
+  /**
+   * Send the enhancement script. On by default.
+   *
+   * Every feature works without it -- search is a form, the download is a link,
+   * the references toggle is a link, the graph is rendered -- so turning it off
+   * costs polish rather than function.
+   */
+  enhance?: boolean;
+  /** Stylesheet URLs for the document head. */
+  stylesheets?: string[];
+  /** Extra markup for the head, e.g. a font link or an analytics tag. */
+  head?: string;
+  lang?: string;
+  /** Identifies provenance-only concepts. As `OkfSite`. */
+  isReference?: (doc: OkfDoc) => boolean;
+  /** Re-read the source on every request rather than caching it. */
+  noCache?: boolean;
+  /** Called after each load, with everything the source and the parse reported. */
+  onDiagnostics?: (diagnostics: {
+    source: SourceDiagnostic[];
+    bundle: BundleDiagnostic[];
+  }) => void;
+}
+
+export interface BundleHandler {
+  (request: Request): Promise<Response>;
+  /** Drop the cached bundle; the next request re-reads the source. */
+  invalidate(): void;
+  /** Stop watching the source. */
+  close(): void;
+}
+
+interface Loaded {
+  bundle: Bundle;
+  files: Record<string, string>;
+}
+
+const html = (body: string, status: number) =>
+  new Response(body, {
+    status,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'content-length': String(new TextEncoder().encode(body).byteLength),
+    },
+  });
+
+const json = (value: unknown) =>
+  new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+
+/**
+ * Serve a bundle, rendered on the server.
+ *
+ * The page that reaches the browser carries the route's markup and nothing
+ * else: no bundle, no corpus, no parse to redo. The three features that do want
+ * the whole bundle ask the server for exactly what they need -- a search query,
+ * a zip of the sources -- so a page stays the same size whether the bundle
+ * holds ten documents or ten thousand.
+ *
+ * Takes and returns web standard `Request` and `Response`, so the same handler
+ * runs under Node's `http` server, a worker runtime, or any framework that
+ * speaks fetch.
+ */
+export function createBundleHandler(options: BundleHandlerOptions): BundleHandler {
+  const {
+    source,
+    title,
+    basename,
+    features,
+    graphRoute = '/graph',
+    searchRoute = '/search',
+    assetPrefix = ASSET_PREFIX,
+    enhance = true,
+    stylesheets = [`${assetPrefix}/tokens.css`, `${assetPrefix}/styles.css`],
+    head,
+    lang = 'en',
+    isReference,
+    noCache = false,
+    onDiagnostics,
+  } = options;
+
+  const urls: ServerChromeUrls = { searchRoute, assetPrefix };
+  let cached: Promise<Loaded> | undefined;
+
+  async function build(): Promise<Loaded> {
+    const { files, diagnostics } = await source.load();
+    const bundle = parseBundle(files);
+    onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
+    return { bundle, files };
+  }
+
+  function loaded(): Promise<Loaded> {
+    if (noCache) return build();
+    // Cache the promise rather than the result, so concurrent first requests
+    // share one read instead of racing to do the same work.
+    cached ??= build().catch((error: unknown) => {
+      cached = undefined;
+      throw error;
+    });
+    return cached;
+  }
+
+  const stopWatching = source.watch?.(() => {
+    cached = undefined;
+  });
+
+  const handler = async (request: Request): Promise<Response> => {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return new Response('Method not allowed', {
+        status: 405,
+        headers: { allow: 'GET, HEAD' },
+      });
+    }
+
+    const url = new URL(request.url);
+
+    // Endpoints first: they are the whole reason the page needs no bundle.
+    if (url.pathname.startsWith(`${assetPrefix}/`)) {
+      const { bundle, files } = await loaded();
+      const endpoint = url.pathname.slice(assetPrefix.length + 1);
+
+      if (endpoint === 'search.json') {
+        const found = searchBundle(bundle, url.searchParams.get('q') ?? '', {
+          limit: Number(url.searchParams.get('limit')) || SEARCH_LIMIT,
+          showReferences: url.searchParams.get('references') !== '0',
+          ...(isReference && { isReference }),
+        });
+        return json(found);
+      }
+
+      if (endpoint === 'bundle.zip') {
+        // The same name the download link asks for, so the two agree.
+        const siteTitle = title ?? titleOf(bundle);
+        const archive = zipFiles(files);
+        return new Response(archive, {
+          status: 200,
+          headers: {
+            'content-type': 'application/zip',
+            'content-length': String(archive.byteLength),
+            'content-disposition': `attachment; filename="${archiveFileName(siteTitle)}"`,
+          },
+        });
+      }
+
+      return new Response('Not found', { status: 404 });
+    }
+
+    const { bundle } = await loaded();
+    const route = hrefToRoute(url.pathname, basename);
+
+    // Outside the basename entirely: not this site's URL to answer for.
+    if (route === null) return new Response('Not found', { status: 404 });
+
+    const siteTitle = title ?? titleOf(bundle);
+    const showReferences = url.searchParams.get('references') !== '0';
+    const query = url.searchParams.get('q') ?? '';
+    const now = new Date();
+
+    const router = createHistoryRouter({
+      ...(basename !== undefined && { basename }),
+      serverRoute: route,
+    });
+
+    const components: Partial<OkfSlots> = {
+      SearchBox: () => createElement(ServerSearchBox, { urls, query }),
+      Download: () => createElement(ServerDownloadLink, { urls, name: archiveFileName(siteTitle) }),
+      ReferencesToggle: () => createElement(ServerReferencesToggle, { route }),
+      // Eager: `lazy` suspends, and a render that cannot wait would emit the
+      // loading fallback as the finished page.
+      Graph: GraphView,
+    };
+
+    const siteProps: OkfSiteProps = {
+      bundle,
+      router,
+      title: siteTitle,
+      ...(basename !== undefined && { basename }),
+      ...(features && { features }),
+      ...(isReference && { isReference }),
+      graphRoute,
+      now,
+      showReferences,
+      components,
+    };
+
+    const isSearch = route === searchRoute;
+    let body: string;
+    let found: boolean;
+
+    if (isSearch) {
+      const results = searchBundle(bundle, query, {
+        limit: SEARCH_LIMIT,
+        showReferences,
+        ...(isReference && { isReference }),
+      });
+      body = renderToString(
+        createElement(OkfProvider, {
+          ...siteProps,
+          children: createElement(
+            Layout,
+            null,
+            createElement(SearchResultsPage, { ...results, query, route }),
+          ),
+        }),
+      );
+      found = true;
+    } else {
+      const doc = bundle.byRoute.get(route);
+      const directory = bundle.directories.get(route);
+      const isGraph = features?.graph !== false && route === graphRoute;
+      // Mirrors OkfRoutes: anything it would render is a 200, and only the page
+      // it would show as not-found gets a 404 -- so a crawler and a reader agree.
+      found = doc !== undefined || directory !== undefined || isGraph;
+      body = renderToString(createElement(OkfSite, siteProps));
+    }
+
+    const pageTitle = pageTitleOf({ bundle, route, isSearch, query, siteTitle });
+
+    const document = renderDocument({
+      title: pageTitle,
+      body,
+      lang,
+      stylesheets,
+      rootId: ROOT_ELEMENT_ID,
+      ...(head !== undefined && { head }),
+      ...(enhance && {
+        enhancement: {
+          payload: JSON.stringify({
+            searchRoute,
+            assetPrefix,
+            ...(basename !== undefined && { basename }),
+          } satisfies EnhancePayload),
+          src: `${assetPrefix}/enhance.js`,
+          scriptId: ENHANCE_SCRIPT_ID,
+        },
+      }),
+    });
+
+    return request.method === 'HEAD'
+      ? new Response(null, {
+          status: found ? 200 : 404,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-length': String(new TextEncoder().encode(document).byteLength),
+          },
+        })
+      : html(document, found ? 200 : 404);
+  };
+
+  handler.invalidate = () => {
+    cached = undefined;
+  };
+  handler.close = () => {
+    stopWatching?.();
+  };
+
+  return handler;
+}
+
+function titleOf(bundle: Bundle): string {
+  return bundle.root?.frontmatter.title ?? bundle.root?.title ?? 'Knowledge bundle';
+}
+
+function pageTitleOf(input: {
+  bundle: Bundle;
+  route: string;
+  isSearch: boolean;
+  query: string;
+  siteTitle: string;
+}): string {
+  const { bundle, route, isSearch, query, siteTitle } = input;
+  if (isSearch) {
+    return query.trim() === '' ? `Search · ${siteTitle}` : `“${query.trim()}” · ${siteTitle}`;
+  }
+  const doc = bundle.byRoute.get(route);
+  return doc && doc.route !== '/' ? `${doc.title} · ${siteTitle}` : siteTitle;
+}

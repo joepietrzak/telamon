@@ -20,6 +20,21 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.cjs"
+    },
+    "./source": {
+      "types": "./dist/source/index.d.ts",
+      "import": "./dist/source/index.js",
+      "require": "./dist/source/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "require": "./dist/server/index.cjs"
+    },
     "./db": {
       "types": "./dist/db/index.d.ts",
       "import": "./dist/db/index.js",
@@ -88,5 +103,8 @@
   "homepage": "https://github.com/joepietrzak/telamon#readme",
   "engines": {
     "node": ">=18"
+  },
+  "bin": {
+    "telamon": "./dist/cli/index.js"
   }
 }

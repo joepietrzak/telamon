@@ -2,7 +2,9 @@ import { Backlinks } from './Backlinks.js';
 import { Breadcrumbs } from './Breadcrumbs.js';
 import { DownloadButton } from './DownloadButton.js';
 import { Header } from './Header.js';
+import { LazyGraph } from './graph/LazyGraph.js';
 import { NavTree } from './NavTree.js';
+import { ReferencesToggle } from './ReferencesToggle.js';
 import { Toc } from './Toc.js';
 import { ConceptHeader, SourcesList } from './metadata.js';
 import { NotFound } from './pages.js';
@@ -26,6 +28,8 @@ export const DEFAULT_SLOTS: ResolvedSlots = {
   Toc,
   Backlinks,
   SearchBox,
+  Graph: LazyGraph,
+  ReferencesToggle,
   Download: DownloadButton,
   NotFound,
   Footer: () => null,

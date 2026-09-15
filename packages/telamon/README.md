@@ -111,6 +111,7 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Rela
 - **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. The graph is code-split, so `d3-force` never lands in your main chunk, and it ships an equivalent text listing for keyboard and screen-reader use.
 - **A references toggle** — see below.
 - **A database source** — see below.
+- **A filesystem source, a server, and a CLI** — `npx telamon serve ./bundle` to read one locally, and the same handler deployed so others can. See below.
 - **A source download** — a header button that hands back every file in the bundle as a ZIP. The bundle is already in memory, so nothing is fetched and the archive is built on click; a reader who wants the markdown behind a page never has to go find the repository.
 
 Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false, download: false }}`.
@@ -254,6 +255,107 @@ A worked example — a SQLite warehouse, the mapping above it, and a script that
 - **Database types become YAML** — dates as ISO-8601, arrays as lists, `null` omitted, and JSON-text columns parsed where `json` names them.
 - **A bad config throws**, at startup and before the database is touched: a mistyped table name is wiring, and failing loudly beats rendering a bundle quietly missing a table.
 - **Bad data does not.** A row whose path column the query did not return, two rows landing on the same path, a table that came back empty — each is a `DbDiagnostic`, and the rest of the bundle still renders. Same bargain `parseBundle` makes.
+
+## Serving a bundle
+
+The library renders a bundle; where the files come from and who does the rendering are separate questions, and both have two answers.
+
+Look at a bundle locally, with no build step and no configuration:
+
+```bash
+npx telamon serve ./bundle
+#   14 files from ./bundle
+#   http://localhost:3000
+```
+
+Or deploy one, so other people can read it:
+
+```ts
+import { fileSource } from 'telamon/source';
+import { createBundleHandler } from 'telamon/server';
+
+const handler = createBundleHandler({ source: fileSource('./bundle') });
+
+export default { fetch: handler };            // a worker runtime
+// or: createServer((req, res) => ...)        // Node, via the CLI's own adapter
+```
+
+The CLI is a thin wrapper over that same handler, so what you see locally is what you deploy.
+
+### Sources
+
+A `BundleSource` is anything that can produce a bundle's files. The handler takes one and never learns which it got:
+
+```ts
+import { fileSource } from 'telamon/source';
+import { databaseSource } from 'telamon/db';
+
+createBundleHandler({ source: fileSource('./bundle', { ignore: ['**/drafts/**'] }) });
+createBundleHandler({ source: databaseSource(config, (sql, params) => pool.query(sql, params)) });
+```
+
+The interface is three members, so your own is not a large undertaking:
+
+```ts
+interface BundleSource {
+  readonly name: string;
+  load(): Promise<{ files: Record<string, string>; diagnostics: SourceDiagnostic[] }>;
+  watch?(onChange: () => void): () => void;
+}
+```
+
+`fileSource` implements `watch`, so `telamon serve` picks up edits without a restart. A source that does not is simply never invalidated.
+
+### What reaches the visitor
+
+The rendered page, and nothing else. No bundle, no corpus, no parse to redo in the browser.
+
+That is the whole point of the server mode. Only three things ever want the entire bundle — search, the source download, and the graph — and each is answered by the server instead:
+
+| | |
+| --- | --- |
+| `GET /search?q=` | A rendered results page. The header search box is a real form that submits to it. |
+| `GET /_telamon/search.json?q=` | The same results as JSON, for the enhancement script. |
+| `GET /_telamon/bundle.zip` | The sources, zipped by the server. The download is a plain link. |
+| the graph | Rendered on the server at `graphRoute`, settled layout and all. |
+
+So a page weighs what the page weighs. Growing every document in a bundle a thousandfold grows a served page by exactly one document — the one it renders.
+
+What *does* scale with the bundle is the sidebar, because it lists every document. That is the navigation being honest rather than a hidden cost, and it is bounded by a link per document rather than a body.
+
+### Progressive enhancement, not hydration
+
+Everything on a served page works with JavaScript switched off: search submits a form, the download is a link, the references toggle is a link that puts the state in the URL, and the graph is already drawn.
+
+The enhancement script — a few kilobytes of plain DOM code, no React — upgrades that in place: the narrow-screen navigation button starts working, `/` and ⌘K focus the search box, and results appear as you type instead of on submit. It carries no bundle; the only thing it ever fetches is the result of a search someone actually typed. `enhance: false` omits it entirely, and the site still works.
+
+```tsx
+// Only if you want your own: the default entry is served for you.
+import { enhancePage } from 'telamon/client';
+
+enhancePage();
+```
+
+### Handler options
+
+| Option | Type | Notes |
+| --- | --- | --- |
+| `source` | `BundleSource` | Required. Where the bundle comes from. |
+| `title` | `string` | Site title. Defaults to the bundle root's own. |
+| `basename` | `string` | Sub-path the site is mounted at. URLs outside it are not answered for. |
+| `features` | `OkfFeatures` | As `OkfSite`. |
+| `searchRoute` | `string` | Where results are rendered. Defaults to `/search`. |
+| `assetPrefix` | `string` | Where endpoints and scripts live. Defaults to `/_telamon`. |
+| `enhance` | `boolean` | Send the enhancement script. Defaults to `true`. |
+| `stylesheets` | `string[]` | Head stylesheets. Defaults to the two library sheets. |
+| `head` | `string` | Extra markup for `<head>` — a font, an analytics tag. |
+| `isReference` | `(doc) => boolean` | What counts as provenance-only. |
+| `noCache` | `boolean` | Re-read the source every request instead of caching it. |
+| `onDiagnostics` | `({ source, bundle }) => void` | Everything the read and the parse reported. |
+
+The bundle is read once and cached; concurrent first requests share a single read, a failed read is not cached, and a source that supports `watch` invalidates itself. `handler.invalidate()` forces a re-read, `handler.close()` stops watching.
+
+Status codes follow what `OkfRoutes` would render: a document, a directory, or the graph is a `200`, and only the not-found page is a `404`, so a crawler and a reader are told the same thing.
 
 ## Conformance and leniency
 

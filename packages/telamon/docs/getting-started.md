@@ -97,6 +97,18 @@ function useRemoteBundle(baseUrl: string) {
 }
 ```
 
+### From a directory, on the server
+
+If the bundle is a directory on the machine doing the rendering, `fileSource` reads it:
+
+```ts
+import { fileSource } from 'telamon/source';
+
+const { files, diagnostics } = await fileSource('./bundle').load();
+```
+
+It reads markdown, skips dotfiles and `node_modules`, takes `ignore` globs and a size ceiling, refuses to loop on a symlinked directory, and reports every file it declined to read rather than leaving a silent hole. If you only want to look at a bundle rather than build a site around it, skip straight to [serving it](#step-6--serving-it).
+
 ### From a database, on the server
 
 If the knowledge already lives in a warehouse, a JSON file says which tables become which files and `telamon/db` does the rest. It never opens a connection — you pass a query function, so credentials, pooling, and dialect stay yours.
@@ -327,6 +339,46 @@ Content problems never throw — a broken link, a concept missing `type`, a rout
 ### Everything else
 
 `onNavigate` for analytics, `graphRoute` to move the graph off `/graph`, `typeColor` to colour graph nodes by concept type, `now` to pin the clock that decides `stale_after` staleness, `renderNotFound` for your own 404. Full table in the [README](../README.md#props).
+
+---
+
+## Step 6 — Serving it
+
+Everything above builds a site you compile and host. The other way round is to let telamon do the rendering.
+
+### Locally
+
+```bash
+npx telamon serve ./bundle
+```
+
+No build, no config, no `package.json`. It reads the directory, serves it at `http://localhost:3000`, and picks up edits as you save. `--port`, `--host`, `--basename`, and `--title` are there when you need them.
+
+### Deployed
+
+The CLI is a thin wrapper over a handler you can deploy yourself:
+
+```ts
+import { fileSource } from 'telamon/source';
+import { createBundleHandler } from 'telamon/server';
+
+const handler = createBundleHandler({
+  source: fileSource('./bundle'),
+  title: 'Acme analytics',
+});
+
+export default { fetch: handler };
+```
+
+It takes web standard `Request` and `Response`, so it runs anywhere that speaks fetch. Swap `fileSource` for `databaseSource` and the same server reads a warehouse instead — the handler never learns which it got.
+
+### What the visitor gets
+
+The rendered page and nothing else. No bundle travels to the browser, so a page weighs what the page weighs: make every document in a bundle a thousand times longer and a served page grows by one document, the one it renders.
+
+The three features that want the whole corpus are answered by the server — search is a form submitting to `/search`, the source download is a link to a zip the server builds, and the graph is drawn before the page is sent. All of which means the site works with JavaScript switched off entirely. A small script then upgrades it in place: the narrow-screen nav button, `/` and ⌘K, and search results as you type. `--no-script` leaves it out and loses no function.
+
+Full option table in the [README](../README.md#serving-a-bundle).
 
 ---
 

@@ -11,6 +11,11 @@ const found = candidates
 if (!found) throw new Error('Could not locate the test fixtures directory.');
 const fixturesDir = found;
 
+/** Absolute path of a fixture directory, for tests that read from disk themselves. */
+export function fixturePath(name: string): string {
+  return join(fixturesDir, name);
+}
+
 /** Walk a fixture directory into the `Record<path, contents>` shape `parseBundle` takes. */
 export function readFixture(name: string): Record<string, string> {
   const root = join(fixturesDir, name);

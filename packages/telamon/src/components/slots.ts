@@ -48,6 +48,10 @@ export interface OkfSlots {
   Toc: ComponentType<DocChromeProps>;
   Backlinks: ComponentType<BacklinksProps>;
   SearchBox: ComponentType<Record<string, never>>;
+  /** The concept graph at `graphRoute`. */
+  Graph: ComponentType<Record<string, never>>;
+  /** The control that hides provenance-only reference concepts. */
+  ReferencesToggle: ComponentType<Record<string, never>>;
   Download: ComponentType<Record<string, never>>;
   NotFound: ComponentType<NotFoundProps>;
   Footer: ComponentType<Record<string, never>>;

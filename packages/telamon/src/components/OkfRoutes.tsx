@@ -1,10 +1,6 @@
-import { Suspense, lazy } from 'react';
 import { useRoute } from '../router/context.js';
 import { useOkfBundle, useOkfConfig } from './context.js';
 import { ConceptPage, DirectoryPage, IndexPage, LogPage } from './pages.js';
-
-// Lazy so `d3-force` and the graph view stay out of the initial chunk.
-const GraphView = lazy(() => import('./graph/GraphView.js'));
 
 /**
  * Resolve the current route against the bundle.
@@ -27,11 +23,7 @@ export function OkfRoutes() {
   }
 
   if (config.features.graph && route === config.graphRoute) {
-    return (
-      <Suspense fallback={<p className="okf-loading">Loading graph…</p>}>
-        <GraphView />
-      </Suspense>
-    );
+    return <config.slots.Graph />;
   }
 
   const directory = bundle.directories.get(route);

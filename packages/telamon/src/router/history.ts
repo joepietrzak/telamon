@@ -21,7 +21,23 @@ export interface HistoryRouterOptions {
  */
 export function createHistoryRouter(options: HistoryRouterOptions = {}): RouterAdapter {
   const basename = normalizeBasename(options.basename);
-  const serverRoute = options.serverRoute ?? '/';
+
+  const readRoute = () => hrefToRoute(window.location.pathname, basename) ?? '/';
+  /**
+   * The route React renders against on the first pass -- the server render, and
+   * the first render of a hydration, which must match it exactly.
+   *
+   * A server render supplies it. A hydrating client does not, and there the
+   * browser's own location is the right answer: it is the URL the server just
+   * rendered for. Defaulting to `/` instead silently mismatches every page but
+   * the root, and React throws the server's HTML away and re-renders the lot.
+   *
+   * Read once here rather than inside the snapshot, because `window` exists
+   * during a `renderToString` under jsdom too, and probing it at render time
+   * would let a test environment hijack the server render.
+   */
+  const serverRoute =
+    options.serverRoute ?? (typeof window === 'undefined' ? '/' : readRoute());
 
   const subscribe = (onStoreChange: () => void) => {
     window.addEventListener('popstate', onStoreChange);
@@ -34,8 +50,8 @@ export function createHistoryRouter(options: HistoryRouterOptions = {}): RouterA
     };
   };
 
-  const readRoute = () => hrefToRoute(window.location.pathname, basename) ?? '/';
   const readFragment = () => window.location.hash.replace(/^#/, '');
+
 
   const createHref = (route: string) => {
     const { path, fragment } = splitRoute(route);

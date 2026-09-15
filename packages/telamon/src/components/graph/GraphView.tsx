@@ -56,8 +56,8 @@ function radiusOf(node: SimNode): number {
   return 6 + Math.min(10, Math.sqrt(node.degree) * 3);
 }
 
-function layout(bundle: Bundle): { nodes: SimNode[]; links: SimLink[] } {
-  const nodes: SimNode[] = bundle.graph.nodes.map((node) => ({
+function layout(graph: Bundle['graph']): { nodes: SimNode[]; links: SimLink[] } {
+  const nodes: SimNode[] = graph.nodes.map((node) => ({
     route: node.route,
     label: node.label,
     ...(node.type && { type: node.type }),
@@ -68,7 +68,7 @@ function layout(bundle: Bundle): { nodes: SimNode[]; links: SimLink[] } {
   const seen = new Set<string>();
   const links: SimLink[] = [];
 
-  for (const edge of bundle.graph.edges) {
+  for (const edge of graph.edges) {
     // An untyped body link says only "these are connected", so reciprocal pairs
     // collapse into one line. A typed relationship names a direction, so
     // `A depends_on B` and `B depends_on A` are two distinct edges.
@@ -185,7 +185,7 @@ export default function GraphView() {
   const navigate = useNavigate();
 
   const markerPrefix = useId().replace(/:/g, '');
-  const { nodes, links } = useMemo(() => layout(bundle), [bundle]);
+  const { nodes, links } = useMemo(() => layout(bundle.graph), [bundle.graph]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [hovered, setHovered] = useState<string | null>(null);
   const dragRef = useRef<{

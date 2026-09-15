@@ -22,3 +22,5 @@ export {
 } from './mapping.js';
 
 export { buildStatement, loadBundle, type QueryFn, type QueryResult } from './load.js';
+
+export { databaseSource } from './source.js';

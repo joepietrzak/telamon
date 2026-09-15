@@ -9,15 +9,19 @@ import { configure } from '@testing-library/dom';
 // ceiling, not a delay -- a passing assertion still returns immediately.
 configure({ asyncUtilTimeout: 5000 });
 
-// jsdom implements neither of these; the layout calls them on every navigation.
-window.scrollTo = () => {};
-Element.prototype.scrollIntoView = function scrollIntoView() {};
+// The source, server, and database suites run under the node environment,
+// where there is no DOM to patch and nothing below applies.
+if (typeof window !== 'undefined') {
+  // jsdom implements neither of these; the layout calls them on every navigation.
+  window.scrollTo = () => {};
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
 
-// Pointer capture is unimplemented in jsdom and is used by the graph's pan gesture.
-if (!Element.prototype.setPointerCapture) {
-  Element.prototype.setPointerCapture = function setPointerCapture() {};
-  Element.prototype.releasePointerCapture = function releasePointerCapture() {};
-  Element.prototype.hasPointerCapture = function hasPointerCapture() {
-    return false;
-  };
+  // Pointer capture is unimplemented in jsdom and is used by the graph's pan gesture.
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = function setPointerCapture() {};
+    Element.prototype.releasePointerCapture = function releasePointerCapture() {};
+    Element.prototype.hasPointerCapture = function hasPointerCapture() {
+      return false;
+    };
+  }
 }
