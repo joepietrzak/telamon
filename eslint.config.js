@@ -11,7 +11,16 @@ export default tseslint.config(
     // so the handful of globals they use are declared here.
     files: ['examples/**/*.mjs'],
     languageOptions: {
-      globals: { console: 'readonly', process: 'readonly', URL: 'readonly' },
+      globals: {
+        Buffer: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        process: 'readonly',
+      },
     },
   },
   {

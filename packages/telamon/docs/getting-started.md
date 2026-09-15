@@ -30,7 +30,7 @@ That renders a complete site: sidebar, routing at `/tables/events_`, breadcrumbs
 
 ## Step 1 — Get the bundle into memory
 
-`telamon` never fetches anything. It takes `Record<string, string>` — bundle-relative path to file contents — and loading is your app's decision. This is the step people get wrong, so here are three working loaders.
+`telamon` never fetches anything. It takes `Record<string, string>` — bundle-relative path to file contents — and loading is your app's decision. This is the step people get wrong, so here are four working loaders.
 
 **Keys must be bundle-relative.** `tables/events_.md`, not `./bundle/tables/events_.md` and not `/abs/path/tables/events_.md`. The routing and every cross-link resolve against those keys.
 
@@ -50,53 +50,6 @@ export const bundle = Object.fromEntries(
 );
 ```
 
-### Build-time, from Node (SSG, scripts, tests)
-
-```ts
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
-
-export function readBundle(root: string): Record<string, string> {
-  const files: Record<string, string> = {};
-  (function walk(dir: string) {
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) walk(full);
-      else if (full.endsWith('.md')) {
-        files[relative(root, full).split(sep).join('/')] = readFileSync(full, 'utf8');
-      }
-    }
-  })(root);
-  return files;
-}
-```
-
-### Runtime, over HTTP
-
-Content updates without a rebuild, at the cost of a loading state. You need a listing of what to fetch — generate a `manifest.json` when you publish the bundle.
-
-```tsx
-function useRemoteBundle(baseUrl: string) {
-  const [bundle, setBundle] = useState<Record<string, string>>();
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const paths: string[] = await fetch(`${baseUrl}/manifest.json`).then((r) => r.json());
-      const texts = await Promise.all(
-        paths.map((p) => fetch(`${baseUrl}/${p}`).then((r) => r.text())),
-      );
-      if (!cancelled) setBundle(Object.fromEntries(paths.map((p, i) => [p, texts[i]!])));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [baseUrl]);
-
-  return bundle;
-}
-```
-
 ### From a directory, on the server
 
 If the bundle is a directory on the machine doing the rendering, `fileSource` reads it:
@@ -107,7 +60,7 @@ import { fileSource } from 'telamon/source';
 const { files, diagnostics } = await fileSource('./bundle').load();
 ```
 
-It reads markdown, skips dotfiles and `node_modules`, takes `ignore` globs and a size ceiling, refuses to loop on a symlinked directory, and reports every file it declined to read rather than leaving a silent hole. If you only want to look at a bundle rather than build a site around it, skip straight to [serving it](#step-6--serving-it).
+It reads markdown, skips dotfiles and `node_modules`, takes `ignore` globs and a size ceiling, refuses to loop on a symlinked directory, and reports every file it declined to read rather than leaving a silent hole. If you only want to look at a bundle rather than build a site around it, skip straight to [step 6](#step-6--or-let-telamon-serve-it).
 
 ### From a database, on the server
 
@@ -145,6 +98,32 @@ const { files, diagnostics } = await loadBundle(config, (sql, params) =>
 
 `files` is the same path → contents map as any other route into the library, so nothing downstream knows the difference. Run it per request for always-fresh pages, or once at build time and write the result out as a checked-in bundle. Full mapping reference in the [README](../README.md#reading-a-bundle-out-of-a-database).
 
+### Runtime, over HTTP
+
+Content updates without a rebuild, at the cost of a loading state. You need a listing of what to fetch — generate a `manifest.json` when you publish the bundle.
+
+```tsx
+function useRemoteBundle(baseUrl: string) {
+  const [bundle, setBundle] = useState<Record<string, string>>();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const paths: string[] = await fetch(`${baseUrl}/manifest.json`).then((r) => r.json());
+      const texts = await Promise.all(
+        paths.map((p) => fetch(`${baseUrl}/${p}`).then((r) => r.text())),
+      );
+      if (!cancelled) setBundle(Object.fromEntries(paths.map((p, i) => [p, texts[i]!])));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
+
+  return bundle;
+}
+```
+
 > **Give the map a stable identity.** `<OkfSite bundle={{ 'a.md': '…' }} />` builds a new object every render, and every new object re-parses the whole bundle. Define it at module scope, or `useMemo` it.
 
 ---
@@ -173,7 +152,9 @@ body { margin: 0; }
 
 ---
 
-## Step 3 — Serve it
+## Step 3 — Host the built app
+
+This step is for the app you just built. If you would rather telamon did the serving, skip to [step 6](#step-6--or-let-telamon-serve-it).
 
 The default router uses real URLs, so `/tables/events_` must return your `index.html` rather than a 404. Vite's dev server already does this. For production:
 
@@ -247,7 +228,7 @@ const slots = {
 <OkfSite bundle={bundle} components={slots} markdownComponents={{ blockquote: Callout }} />;
 ```
 
-Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
+Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `Download`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
 
 ---
 
@@ -266,7 +247,7 @@ All default to `true`. Turning `graph` off also means its chunk is never request
 
 ### Handing back the source
 
-The header carries a Download button that packs every file in the bundle into a ZIP named after the site title. Nothing is fetched -- the bundle is already in memory, so the archive is built on click and costs nothing until someone asks for it. Turn it off with `features={{ download: false }}`, or build your own from `zipFiles(bundle.files)`.
+The header carries a Download control that hands back every file in the bundle as a ZIP named after the site title. In an app it is a button: the bundle is already in memory, so the archive is built on click and costs nothing until someone asks for it. On a served site it is a link to a zip the server builds, which means it works with JavaScript off. Turn it off with `features={{ download: false }}`, or build your own from `zipFiles(bundle.files)`.
 
 ### Hiding provenance-only concepts
 
@@ -342,7 +323,7 @@ Content problems never throw — a broken link, a concept missing `type`, a rout
 
 ---
 
-## Step 6 — Serving it
+## Step 6 — Or let telamon serve it
 
 Everything above builds a site you compile and host. The other way round is to let telamon do the rendering.
 
@@ -433,17 +414,23 @@ renderToString(<OkfSite bundle={bundle} router={createMemoryRouter(req.path)} />
 
 ```ts
 import { parseBundle } from 'telamon';
+import { fileSource } from 'telamon/source';
 
-const bundle = parseBundle(readBundle('./bundle'));
-const problems = bundle.diagnostics.filter((d) => d.severity === 'warning');
+const { files, diagnostics: read } = await fileSource('./bundle').load();
+const bundle = parseBundle(files);
+
+// Two layers, and both matter: what could not be read, and what does not parse.
+const problems = [...read, ...bundle.diagnostics].filter((d) => d.severity === 'warning');
 
 if (problems.length > 0) {
-  for (const d of problems) console.error(`${d.filePath}: [${d.code}] ${d.message}`);
+  for (const d of problems) console.error(`${d.filePath ?? ''}: [${d.code}] ${d.message}`);
   process.exit(1);
 }
 ```
 
-Codes: `missing-type`, `invalid-frontmatter`, `frontmatter-on-reserved-file`, `broken-link`, `unresolved-index-entry`, `route-collision`, `unsupported-okf-version`, `broken-relationship`, `invalid-relationship`.
+Parse codes: `missing-type`, `invalid-frontmatter`, `frontmatter-on-reserved-file`, `broken-link`, `unresolved-index-entry`, `route-collision`, `unsupported-okf-version`, `broken-relationship`, `invalid-relationship`.
+
+Read codes, from `fileSource`: `unreadable-directory`, `unreadable-file`, `file-too-large`, `broken-symlink`, `empty-source`. A database source reports its own — see the [README](../README.md#what-it-does-with-the-rows).
 
 ---
 

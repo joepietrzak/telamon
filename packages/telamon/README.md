@@ -100,7 +100,7 @@ And when markup itself needs to change, replace a whole region with a slot:
 />
 ```
 
-Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Download`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
+Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `Download`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
 
 ## What you get out of the box
 
@@ -108,11 +108,11 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Rela
 - **Navigation** — a sidebar built from the directory tree, ordered by each `index.md`'s own link order and descriptions where present, alphabetical where not. Plus breadcrumbs and an on-page table of contents.
 - **Search** — a dependency-free index over titles, descriptions, tags, types, headings, and body text (code fences included: in a data bundle the SQL is often the thing worth finding). Opens with `/` or ⌘K. The index is built on first use, so a site that never searches never pays for it.
 - **Typed relationships** — see below.
-- **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. The graph is code-split, so `d3-force` never lands in your main chunk, and it ships an equivalent text listing for keyboard and screen-reader use.
+- **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. In an app the graph is code-split, so `d3-force` never lands in your main chunk; on a served site it arrives already drawn. Either way it ships an equivalent text listing for keyboard and screen-reader use.
 - **A references toggle** — see below.
-- **A database source** — see below.
-- **A filesystem source, a server, and a CLI** — `npx telamon serve ./bundle` to read one locally, and the same handler deployed so others can. See below.
-- **A source download** — a header button that hands back every file in the bundle as a ZIP. The bundle is already in memory, so nothing is fetched and the archive is built on click; a reader who wants the markdown behind a page never has to go find the repository.
+- **Sources** — read a bundle from a directory or out of a database, behind one interface. See below.
+- **A server and a CLI** — `npx telamon serve ./bundle` to read one locally, and the same handler deployed so others can. See below.
+- **A source download** — a header control that hands back every file in the bundle as a ZIP, so a reader who wants the markdown behind a page never has to go find the repository. In an app it is a button building the archive from the bundle already in memory; on a served site it is a link to a zip the server builds.
 
 Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false, download: false }}`.
 
@@ -254,7 +254,7 @@ A worked example — a SQLite warehouse, the mapping above it, and a script that
 - **Indexes are synthesized** for the root and every mapped directory (SPEC §8), so the sidebar gets authored order and one-line descriptions rather than a bare directory listing. A mapping that writes its own `index.md` is left alone; `generateIndexes: false` turns the whole thing off.
 - **Database types become YAML** — dates as ISO-8601, arrays as lists, `null` omitted, and JSON-text columns parsed where `json` names them.
 - **A bad config throws**, at startup and before the database is touched: a mistyped table name is wiring, and failing loudly beats rendering a bundle quietly missing a table.
-- **Bad data does not.** A row whose path column the query did not return, two rows landing on the same path, a table that came back empty — each is a `DbDiagnostic`, and the rest of the bundle still renders. Same bargain `parseBundle` makes.
+- **Bad data does not.** Each becomes a `DbDiagnostic` and the rest of the bundle still renders — the same bargain `parseBundle` makes. Codes: `missing-column`, `empty-path-segment`, `invalid-json`, `path-collision`, `empty-result`, `empty-body`.
 
 ## Serving a bundle
 
@@ -336,6 +336,31 @@ import { enhancePage } from 'telamon/client';
 enhancePage();
 ```
 
+### Deploying
+
+The handler is the whole integration. Everything else is whatever your runtime wants:
+
+```ts
+// Workers, Deno, Bun -- anything that speaks fetch
+export default { fetch: handler };
+```
+
+```ts
+// Node
+import { createServer } from 'node:http';
+
+createServer(async (req, res) => {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+  const response = await handler(new Request(url, { headers: new Headers(req.headers) }));
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+}).listen(3000);
+```
+
+The page asks for two stylesheets and one script. Serve them yourself from `telamon/styles.css`, `telamon/tokens.css`, and `telamon/enhance.js`, or put them on a CDN and point `stylesheets` and `enhanceSrc` at it.
+
+[`examples/deploy`](../../examples/deploy) is a working one: a server, a Dockerfile, and measured numbers for what it costs to run.
+
 ### Handler options
 
 | Option | Type | Notes |
@@ -347,6 +372,7 @@ enhancePage();
 | `searchRoute` | `string` | Where results are rendered. Defaults to `/search`. |
 | `assetPrefix` | `string` | Where endpoints and scripts live. Defaults to `/_telamon`. |
 | `enhance` | `boolean` | Send the enhancement script. Defaults to `true`. |
+| `enhanceSrc` | `string` | URL of the enhancement script. Defaults to `{assetPrefix}/enhance.js`. |
 | `stylesheets` | `string[]` | Head stylesheets. Defaults to the two library sheets. |
 | `head` | `string` | Extra markup for `<head>` — a font, an analytics tag. |
 | `isReference` | `(doc) => boolean` | What counts as provenance-only. |
@@ -443,10 +469,20 @@ Adapters speak in routes — basename-free and URL-decoded. When you supply one,
 
 ### Server rendering
 
-`createMemoryRouter(initialRoute)` has no browser dependency, and the History router defines a server snapshot, so either renders on the server:
+For rendering a bundle inside a server you already have. If you want telamon to *be* the server, see [Serving a bundle](#serving-a-bundle) instead.
+
+`createMemoryRouter(initialRoute)` has no browser dependency, so it renders on the server:
 
 ```tsx
 renderToString(<OkfSite bundle={bundle} router={createMemoryRouter(req.path)} />);
+```
+
+The History router works too, and is what you want if the page will hydrate: pass `serverRoute` so the server renders the route the browser is at, since React uses that same snapshot for the first render of a hydration.
+
+```tsx
+renderToString(
+  <OkfSite bundle={bundle} router={createHistoryRouter({ serverRoute: req.path })} />,
+);
 ```
 
 ### Building your own chrome
@@ -471,6 +507,8 @@ pnpm test          # vitest, against the real GA4 reference bundle plus edge-cas
 pnpm typecheck
 pnpm build
 pnpm dev           # the playground: two bundles, three token themes, live diagnostics
+
+npx telamon serve ./bundle   # or skip all of it and just read a bundle
 ```
 
 ## License

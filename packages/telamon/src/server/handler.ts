@@ -44,6 +44,8 @@ export interface BundleHandlerOptions {
    * costs polish rather than function.
    */
   enhance?: boolean;
+  /** URL of the enhancement script. Defaults to `{assetPrefix}/enhance.js`. */
+  enhanceSrc?: string;
   /** Stylesheet URLs for the document head. */
   stylesheets?: string[];
   /** Extra markup for the head, e.g. a font link or an analytics tag. */
@@ -111,6 +113,7 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
     searchRoute = '/search',
     assetPrefix = ASSET_PREFIX,
     enhance = true,
+    enhanceSrc = `${assetPrefix}/enhance.js`,
     stylesheets = [`${assetPrefix}/tokens.css`, `${assetPrefix}/styles.css`],
     head,
     lang = 'en',
@@ -270,7 +273,7 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
             assetPrefix,
             ...(basename !== undefined && { basename }),
           } satisfies EnhancePayload),
-          src: `${assetPrefix}/enhance.js`,
+          src: enhanceSrc,
           scriptId: ENHANCE_SCRIPT_ID,
         },
       }),

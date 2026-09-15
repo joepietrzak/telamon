@@ -42,6 +42,7 @@
     },
     "./styles.css": "./dist/styles.css",
     "./tokens.css": "./dist/tokens.css",
+    "./enhance.js": "./dist/enhance.global.js",
     "./package.json": "./package.json"
   },
   "keywords": [
