@@ -72,6 +72,12 @@ spec:
 
           securityContext:
             runAsNonRoot: true
+            # Numeric, and required rather than decorative: with runAsNonRoot
+            # set, the kubelet has to prove the user is not root before it
+            # starts the container. An image whose USER is a name -- `node` --
+            # cannot be verified, and the pod fails with
+            # CreateContainerConfigError instead of running.
+            runAsUser: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }

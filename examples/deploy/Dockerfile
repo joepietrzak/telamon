@@ -21,5 +21,8 @@ COPY bundle ./bundle
 
 ENV PORT=3000
 EXPOSE 3000
-USER node
+# The uid rather than the name: a Kubernetes pod with runAsNonRoot cannot
+# verify a named user, and refuses to start the container. 1000 is `node` in
+# the official images.
+USER 1000
 CMD ["node", "server.mjs"]
