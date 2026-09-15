@@ -42,7 +42,7 @@ const ASSETS = {
 
 const assetPath = (specifier) => new URL(import.meta.resolve(specifier));
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
@@ -73,6 +73,26 @@ createServer((req, res) => {
     if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' });
     res.end('Internal server error');
   });
-}).listen(PORT, () => {
+});
+
+// Read and parse before listening. An unreadable bundle is then a startup
+// failure rather than a pod that passes its checks and fails live traffic, and
+// the first visitor does not pay for the parse.
+try {
+  await handler.warm();
+} catch (error) {
+  console.error(`cannot read ${BUNDLE}: ${error.message}`);
+  process.exit(1);
+}
+
+server.listen(PORT, () => {
   console.log(`serving ${BUNDLE} on http://localhost:${PORT}`);
 });
+
+// Stop accepting connections on SIGTERM, which is how Kubernetes asks.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    handler.close();
+    server.close(() => process.exit(0));
+  });
+}

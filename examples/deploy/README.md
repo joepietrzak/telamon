@@ -70,6 +70,45 @@ createBundleHandler({ source, stylesheets: ['https://cdn.example.com/okf/styles.
 
 **The graph settles a layout per request.** Fine for a bundle this size, and the first thing to put behind a cache header if your graph is large.
 
+## Kubernetes
+
+Manifests in [`k8s/`](./k8s): a Deployment, a Service, and an Ingress.
+
+```bash
+kubectl apply -f k8s/
+```
+
+The bundle is baked into the image, so a pod needs no volume, no init container, and nothing mounted. Publishing documentation is a build and a rollout, and rolling back is `kubectl rollout undo`.
+
+### Probes
+
+The server calls `handler.warm()` before it listens, so the port opening already means the bundle parsed. Readiness then points at `/_telamon/health`, which answers `503` while the bundle is unreadable and `200` once it is not — and shares the same cached read, so probing costs nothing after the first one.
+
+Liveness is deliberately dumber: an open socket. Pointing liveness at `/health` too would restart a pod for being unable to reach its source, which is the one thing restarting cannot fix.
+
+### Sizing
+
+Memory is roughly **35× the markdown**, because parsed syntax trees are much larger than their source, and every replica pays it in full — nothing is shared between pods. Measured on a bundle of 2000 documents and 8 MB of markdown:
+
+| | |
+| --- | --- |
+| idle, before the first request | 89 MB |
+| after the read and parse | 288 MB |
+| after the search index builds | 296 MB |
+| after one `/graph` render | 384 MB |
+
+Time, on the same bundle: the read and parse take **5.2 s** (paid at startup, by `warm()`), a warm page **150 ms**, the first search **148 ms** and every one after **4 ms**.
+
+### Two things that will bite at this size
+
+**`/graph` settles a force layout on every request** — **7.5 s** of CPU for 2000 nodes, synchronously, blocking every other request on that pod. Under a CPU limit it is worse. Cache it at the ingress, as the manifest does, or turn it off with `features: { graph: false }`.
+
+**Pages grow with the sidebar**, which lists every document: 560 KB and 150 ms at 2000 documents. That is navigation, not content — the bundle still never travels — but it is the number to watch as a bundle grows, and the reason to think about how the tree is organised.
+
+### If you move to a database source later
+
+`handler.invalidate()` only affects the pod that received the call, so replicas will drift as the warehouse changes. Pick one: `noCache: true` and a query per request, a rolling restart when your pipeline publishes, or a Job that fans out to each pod.
+
 ## Docker
 
 ```bash

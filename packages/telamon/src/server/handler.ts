@@ -64,6 +64,17 @@ export interface BundleHandlerOptions {
 
 export interface BundleHandler {
   (request: Request): Promise<Response>;
+  /**
+   * Read and parse the bundle now, rather than on the first request.
+   *
+   * Without this the first visitor pays for the read and the parse, which on a
+   * large bundle is seconds. Worse, under an orchestrator the process is
+   * "up" before it knows whether the source is even readable, so a pod with an
+   * unmounted volume or an unreachable database passes its checks and then
+   * fails live traffic. `await handler.warm()` before you listen and a broken
+   * source is a startup failure, which is what it is.
+   */
+  warm(): Promise<void>;
   /** Drop the cached bundle; the next request re-reads the source. */
   invalidate(): void;
   /** Stop watching the source. */
@@ -159,10 +170,10 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
 
     // Endpoints first: they are the whole reason the page needs no bundle.
     if (url.pathname.startsWith(`${assetPrefix}/`)) {
-      const { bundle, files } = await loaded();
       const endpoint = url.pathname.slice(assetPrefix.length + 1);
 
       if (endpoint === 'search.json') {
+        const { bundle } = await loaded();
         const found = searchBundle(bundle, url.searchParams.get('q') ?? '', {
           limit: Number(url.searchParams.get('limit')) || SEARCH_LIMIT,
           showReferences: url.searchParams.get('references') !== '0',
@@ -171,7 +182,30 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
         return json(found);
       }
 
+      if (endpoint === 'health') {
+        // Readiness, not liveness: it answers "can this process serve a page",
+        // which means it must have the bundle. It shares the same cached read,
+        // so a probe warms the pod rather than duplicating the work.
+        try {
+          const { bundle: loadedBundle } = await loaded();
+          return json({
+            status: 'ok',
+            documents: loadedBundle.docs.length,
+            diagnostics: loadedBundle.diagnostics.length,
+          });
+        } catch (error) {
+          return new Response(
+            JSON.stringify({
+              status: 'error',
+              message: error instanceof Error ? error.message : String(error),
+            }),
+            { status: 503, headers: { 'content-type': 'application/json; charset=utf-8' } },
+          );
+        }
+      }
+
       if (endpoint === 'bundle.zip') {
+        const { bundle, files } = await loaded();
         // The same name the download link asks for, so the two agree.
         const siteTitle = title ?? titleOf(bundle);
         const archive = zipFiles(files);
@@ -290,6 +324,9 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
       : html(document, found ? 200 : 404);
   };
 
+  handler.warm = async () => {
+    await loaded();
+  };
   handler.invalidate = () => {
     cached = undefined;
   };

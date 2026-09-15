@@ -266,6 +266,54 @@ describe('the endpoints that replaced the bundle', () => {
     expect(hidden).toContain('href="/references"');
   });
 
+  it('reports readiness once the bundle is loadable', async () => {
+    const handler = createBundleHandler({ source: memorySource() });
+    const response = await handler(get('/_telamon/health'));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'ok',
+      documents: 17,
+      diagnostics: 0,
+    });
+  });
+
+  it('reports 503 while the source cannot be read', async () => {
+    let broken = true;
+    const source: BundleSource = {
+      name: 'flaky',
+      load: async () => {
+        if (broken) throw new Error('volume is not mounted');
+        return { files: demo, diagnostics: [] };
+      },
+    };
+    const handler = createBundleHandler({ source });
+
+    const sick = await handler(get('/_telamon/health'));
+    expect(sick.status).toBe(503);
+    expect(await sick.json()).toEqual({
+      status: 'error',
+      message: 'volume is not mounted',
+    });
+
+    // A failed read is not cached, so recovery needs no restart.
+    broken = false;
+    expect((await handler(get('/_telamon/health'))).status).toBe(200);
+  });
+
+  it('answers health without rendering a page', async () => {
+    // It must stay cheap enough to probe every few seconds.
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+
+    await handler(get('/_telamon/health'));
+    await handler(get('/_telamon/health'));
+    await handler(get('/_telamon/health'));
+
+    // One read shared by all of them, and no markup built.
+    expect(source.loads).toBe(1);
+  });
+
   it('404s an endpoint it does not have', async () => {
     const handler = createBundleHandler({ source: memorySource() });
     expect((await handler(get('/_telamon/nope.json'))).status).toBe(404);
@@ -321,6 +369,32 @@ describe('reading the source', () => {
     fire();
     await handler(get('/'));
     expect(source.loads).toBe(2);
+  });
+
+  it('warms on demand, so the first visitor does not pay for the parse', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+
+    expect(source.loads).toBe(0);
+    await handler.warm();
+    expect(source.loads).toBe(1);
+
+    // And the request that follows reuses it.
+    await handler(get('/'));
+    expect(source.loads).toBe(1);
+  });
+
+  it('rejects from warm() when the source is unreadable', async () => {
+    const handler = createBundleHandler({
+      source: {
+        name: 'missing',
+        load: () => Promise.reject(new Error('no such directory')),
+      },
+    });
+
+    // The point of warming: a broken source is a startup failure, not a
+    // healthy-looking process that fails its first real request.
+    await expect(handler.warm()).rejects.toThrow(/no such directory/);
   });
 
   it('retries after a failed read rather than caching the failure', async () => {

@@ -317,6 +317,7 @@ That is the whole point of the server mode. Only three things ever want the enti
 | `GET /search?q=` | A rendered results page. The header search box is a real form that submits to it. |
 | `GET /_telamon/search.json?q=` | The same results as JSON, for the enhancement script. |
 | `GET /_telamon/bundle.zip` | The sources, zipped by the server. The download is a plain link. |
+| `GET /_telamon/health` | `200` once the bundle is loadable, `503` while it is not. For a readiness probe. |
 | the graph | Rendered on the server at `graphRoute`, settled layout and all. |
 
 So a page weighs what the page weighs. Growing every document in a bundle a thousandfold grows a served page by exactly one document — the one it renders.
@@ -380,6 +381,8 @@ The page asks for two stylesheets and one script. Serve them yourself from `tela
 | `onDiagnostics` | `({ source, bundle }) => void` | Everything the read and the parse reported. |
 
 The bundle is read once and cached; concurrent first requests share a single read, a failed read is not cached, and a source that supports `watch` invalidates itself. `handler.invalidate()` forces a re-read, `handler.close()` stops watching.
+
+That read is lazy — it happens on the first request. A long-lived server should `await handler.warm()` before it listens, so an unreadable bundle is a startup failure rather than a process that looks healthy and fails its first real request, and so the first visitor does not pay for the parse. On a large bundle that is seconds.
 
 Status codes follow what `OkfRoutes` would render: a document, a directory, or the graph is a `200`, and only the not-found page is a `404`, so a crawler and a reader are told the same thing.
 

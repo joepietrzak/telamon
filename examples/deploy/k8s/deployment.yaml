@@ -1,0 +1,78 @@
+# The bundle is baked into the image, so a pod needs no volume, no init
+# container, and nothing mounted. Publishing documentation is a build and a
+# rollout; rolling back is `kubectl rollout undo`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-docs
+  labels: { app: analytics-docs }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: analytics-docs }
+  template:
+    metadata:
+      labels: { app: analytics-docs }
+    spec:
+      containers:
+        - name: server
+          image: acme/analytics-docs:2026-09-15
+          ports:
+            - name: http
+              containerPort: 3000
+
+          # Readiness is the one that matters. The server calls
+          # `handler.warm()` before it listens, so the port opening already
+          # means the bundle parsed -- but the probe keeps a pod out of the
+          # Service if its source later becomes unreadable.
+          #
+          # `/_telamon/health` answers 503 until the bundle is loadable, and
+          # shares the same cached read, so probing costs nothing after the
+          # first one.
+          readinessProbe:
+            httpGet: { path: /_telamon/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Liveness is deliberately dumber: an open socket. Pointing it at
+          # /health too means a slow parse or an unreachable database restarts
+          # a pod that is working through exactly that problem.
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # A large bundle takes seconds to parse and the server warms before
+          # listening, so give it room to start rather than restarting it
+          # mid-parse. Raise this if your bundle is big.
+          startupProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+            failureThreshold: 24 # up to two minutes
+
+          resources:
+            # Memory is roughly 35x the markdown, because parsed syntax trees
+            # are much larger than their source, and every replica pays it in
+            # full -- nothing is shared. Measured: an 8 MB bundle of 2000
+            # documents sits at ~300 MB, ~380 MB after a graph render.
+            #
+            # Measure your own bundle and set these from it.
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { memory: 768Mi }
+
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: production
+
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+
+      # The bundle is read once and cached, so a pod holds no request state.
+      # Rolling updates need no draining beyond in-flight requests.
+      terminationGracePeriodSeconds: 15

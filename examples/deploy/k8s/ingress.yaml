@@ -1,0 +1,41 @@
+# Serving under a sub-path? Tell the handler where it lives with
+# `basename: '/docs'`, or the links it renders will point at the origin root.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: analytics-docs
+  annotations:
+    # The graph settles a force layout on every request -- seconds of CPU on a
+    # large bundle -- so it is worth caching. `proxy_cache_valid` alone does
+    # nothing: nginx needs a zone, which is declared once on the controller
+    # rather than here.
+    #
+    #   # in the ingress-nginx controller ConfigMap
+    #   http-snippet: |
+    #     proxy_cache_path /tmp/okf levels=1:2 keys_zone=okf:10m max_size=100m
+    #                      inactive=1h use_temp_path=off;
+    #
+    # With that in place, this turns it on for the two paths worth caching.
+    # If you would rather not configure caching at all, turn the graph off
+    # with `features: { graph: false }`.
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location /graph {
+        proxy_cache okf;
+        proxy_cache_valid 200 1h;
+      }
+      location /_telamon/ {
+        proxy_cache okf;
+        proxy_cache_valid 200 1h;
+      }
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: docs.acme.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-docs
+                port: { name: http }
