@@ -20,7 +20,17 @@ async function renderGraph(
   return { router, canvas: canvas as unknown as SVGElement };
 }
 
-const nodeFor = (name: RegExp | string) => screen.getByRole('button', { name });
+/**
+ * A node in the graph itself.
+ *
+ * Nodes are links rather than buttons: they carry a real href, so a
+ * server-rendered graph navigates with no JavaScript at all. That means the
+ * listing below the graph offers a link of the same name for every concept --
+ * two presentations of one set, each in its own labelled region -- so a query
+ * for a node has to say which of the two it means.
+ */
+const nodeFor = (name: RegExp | string) =>
+  within(screen.getByRole('group', { name: /Force-directed graph/ })).getByRole('link', { name });
 
 /**
  * jsdom implements no `PointerEvent`, and `fireEvent.pointerMove(el, { clientX })`
@@ -135,20 +145,24 @@ describe('graph node navigation', () => {
     expect(router.current).toBe('/tables/events_');
   });
 
-  it('navigates from the keyboard', async () => {
-    const user = userEvent.setup();
-    const { router } = await renderGraph();
-
-    nodeFor(/GA4 Events Export/).focus();
-    await user.keyboard('{Enter}');
-    expect(router.current).toBe('/tables/events_');
-  });
-
-  it('exposes nodes as named, focusable controls', async () => {
+  // Enter on a focused link is the browser's own activation behaviour, which
+  // jsdom does not implement -- so what this asserts is the thing that makes
+  // the keyboard (and a page whose JavaScript never ran) work at all: a real
+  // href on a natively focusable element.
+  it('reaches nodes from the keyboard without JavaScript', async () => {
     await renderGraph();
     const node = nodeFor(/GA4 Events Export/);
-    expect(node).toHaveAttribute('tabindex', '0');
-    expect(node).toHaveAccessibleName('GA4 Events Export, BigQuery Table');
+
+    expect(node).toHaveAttribute('href', '/tables/events_');
+    node.focus();
+    expect(node).toHaveFocus();
+  });
+
+  it('exposes nodes as named links', async () => {
+    await renderGraph();
+    expect(nodeFor(/GA4 Events Export/)).toHaveAccessibleName(
+      'GA4 Events Export, BigQuery Table',
+    );
   });
 
   it('offers the same concepts as text for keyboard and reader use', async () => {

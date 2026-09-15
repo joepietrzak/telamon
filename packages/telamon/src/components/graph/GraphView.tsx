@@ -9,7 +9,7 @@ import {
   type SimulationNodeDatum,
 } from 'd3-force';
 import type { Bundle } from '../../bundle/types.js';
-import { Link, useNavigate, useRoute } from '../../router/context.js';
+import { Link, useNavigate, useRoute, useRouter } from '../../router/context.js';
 import { useClassName, useOkfBundle, useOkfConfig } from '../context.js';
 
 interface SimNode extends SimulationNodeDatum {
@@ -210,6 +210,7 @@ export default function GraphView() {
   const className = useClassName('graph');
   const { route } = useRoute();
   const navigate = useNavigate();
+  const router = useRouter();
 
   const markerPrefix = useId().replace(/:/g, '');
   const { nodes, links } = useMemo(() => settledLayout(bundle.graph), [bundle.graph]);
@@ -370,34 +371,51 @@ export default function GraphView() {
           {nodes.map((node) => {
             const isCurrent = node.route === route;
             return (
-              <g
+              // A real link rather than a `role="button"`: an anchor is
+              // focusable, activates on Enter, opens in a new tab on a
+              // modified click, and -- the reason it matters here -- still
+              // navigates on a page that was rendered by a server and has no
+              // JavaScript behind it. A button that only works once React
+              // arrives advertises something it cannot do.
+              <a
                 key={node.route}
                 className={`okf-graph-node${isCurrent ? ' okf-graph-node--current' : ''}`}
-                transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}
-                role="button"
-                tabIndex={0}
+                href={router.createHref(node.route)}
                 aria-label={node.type ? `${node.label}, ${node.type}` : node.label}
+                {...(isCurrent && { 'aria-current': 'page' as const })}
                 onMouseEnter={() => setHovered(node.route)}
                 onMouseLeave={() => setHovered(null)}
                 onFocus={() => setHovered(node.route)}
                 onBlur={() => setHovered(null)}
-                onClick={() => {
-                  // Ignore the click that terminates a pan.
+                onClick={(event) => {
+                  // Leave the browser to handle anything that is not a plain
+                  // left click: open in a new tab, a new window, a download.
+                  if (
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  // The click that ends a pan is not a click on the node.
                   if (draggedRef.current) return;
                   navigate(node.route);
                 }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return;
-                  event.preventDefault();
-                  navigate(node.route);
-                }}
               >
-                <circle r={radiusOf(node)} fill={colorFor(node.type)} />
-                <text className="okf-graph-label" x={radiusOf(node) + 5} y={4}>
-                  {node.label}
-                </text>
-                <title>{node.type ? `${node.label} - ${node.type}` : node.label}</title>
-              </g>
+                {/* The transform lives on a group inside: React types `a` as
+                    an HTML anchor, which has no transform, and nesting is the
+                    better-supported SVG shape anyway. */}
+                <g transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}>
+                  <circle r={radiusOf(node)} fill={colorFor(node.type)} />
+                  <text className="okf-graph-label" x={radiusOf(node) + 5} y={4}>
+                    {node.label}
+                  </text>
+                  <title>{node.type ? `${node.label} - ${node.type}` : node.label}</title>
+                </g>
+              </a>
             );
           })}
         </g>

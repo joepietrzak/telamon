@@ -916,6 +916,9 @@ a.okf-references-toggle {
 
 .okf-graph-node {
   cursor: pointer;
+  /* Nodes are anchors, and a host page's own `a` rule should not underline
+     them or repaint their labels. */
+  text-decoration: none;
 }
 
 .okf-graph-node:focus {
