@@ -55,6 +55,22 @@ export function panned(view: View, dx: number, dy: number): View {
 }
 
 /**
+ * Whether a wheel event is asking to zoom rather than to scroll.
+ *
+ * The map-embed bargain: a bare wheel belongs to the page, so a reader
+ * scrolling past a 620px-tall graph is never trapped in it, and zooming is
+ * something you ask for with a modifier. A trackpad pinch asks for you --
+ * browsers report it as a wheel event with `ctrlKey` set, which is the same
+ * gesture arriving by a different route.
+ *
+ * A caller that zooms must also call `preventDefault`, or the browser zooms
+ * the whole page underneath the graph.
+ */
+export function isZoomGesture(event: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return event.ctrlKey || event.metaKey;
+}
+
+/**
  * The view after one wheel notch.
  *
  * No usable delta is not a zoom. This rejects NaN and a missing deltaY as well

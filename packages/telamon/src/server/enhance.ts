@@ -2,6 +2,7 @@ import {
   INITIAL_VIEW,
   VIEWPORT_CLASS,
   isPan,
+  isZoomGesture,
   panned,
   viewTransform,
   zoomed,
@@ -444,11 +445,19 @@ function enhanceGraph(): void {
     true,
   );
 
-  // Passive: the page scrolls as it always did, and the graph zooms with it.
-  // Claiming the wheel outright would trap a reader trying to scroll past.
-  canvas.addEventListener('wheel', (event) => apply(zoomed(view, event.deltaY)), {
-    passive: true,
-  });
+  // Non-passive, because a zoom has to cancel the event: a trackpad pinch
+  // arrives here as a ctrl-wheel, and left alone the browser zooms the entire
+  // page on top of the graph. A bare wheel is not a zoom and is left to scroll
+  // the page, so nobody is trapped in a graph they were only scrolling past.
+  canvas.addEventListener(
+    'wheel',
+    (event) => {
+      if (!isZoomGesture(event)) return;
+      event.preventDefault();
+      apply(zoomed(view, event.deltaY));
+    },
+    { passive: false },
+  );
 
   canvas.classList.add('okf-graph-canvas--interactive');
 }

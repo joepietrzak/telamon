@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   forceCenter,
   forceCollide,
@@ -15,6 +15,7 @@ import {
   INITIAL_VIEW,
   VIEWPORT_CLASS,
   isPan,
+  isZoomGesture,
   panned,
   viewTransform,
   zoomed,
@@ -221,6 +222,35 @@ export default function GraphView() {
   // `renderToString` under jsdom and mismatches on hydration.
   const [interactive, setInteractive] = useState(false);
   useEffect(() => setInteractive(true), []);
+
+  const detachWheel = useRef<(() => void) | null>(null);
+  /**
+   * The wheel listener, attached by hand.
+   *
+   * Not `onWheel`: React registers wheel listeners passively at the root, so
+   * `preventDefault` there is a no-op and the browser zooms the whole page on
+   * top of whatever the graph does.
+   *
+   * Not an effect either. A passive effect flushes after the commit that put
+   * the graph on screen, which leaves a window where the graph is visible and
+   * not yet zoomable -- a dropped first gesture in a browser, and a flaky test
+   * here. A ref callback runs during the commit itself. It returns nothing and
+   * cleans up on the `null` call, because a returned cleanup is React 19 and
+   * this library supports 18.
+   */
+  const canvasRef = useCallback((canvas: SVGSVGElement | null) => {
+    detachWheel.current?.();
+    detachWheel.current = null;
+    if (!canvas) return;
+
+    const onWheel = (event: WheelEvent): void => {
+      if (!isZoomGesture(event)) return;
+      event.preventDefault();
+      setView((current) => zoomed(current, event.deltaY));
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    detachWheel.current = () => canvas.removeEventListener('wheel', onWheel);
+  }, []);
   const [hovered, setHovered] = useState<string | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -245,12 +275,13 @@ export default function GraphView() {
           Concept graph
         </h1>
         <p className="okf-description">
-          {nodes.length} concepts, {links.length} cross-links. Drag to pan, scroll to zoom, click a
-          node to open it.
+          {nodes.length} concepts, {links.length} cross-links. Drag to pan, pinch or ctrl/⌘-scroll
+          to zoom, click a node to open it.
         </p>
       </header>
 
       <svg
+        ref={canvasRef}
         className={`okf-graph-canvas${interactive ? ' okf-graph-canvas--interactive' : ''}`}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         // Not role="img": that would collapse the graph into a single opaque
@@ -302,9 +333,6 @@ export default function GraphView() {
         }}
         onPointerCancel={() => {
           dragRef.current = null;
-        }}
-        onWheel={(event) => {
-          setView((current) => zoomed(current, event.deltaY));
         }}
       >
         <defs>

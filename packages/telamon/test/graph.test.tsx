@@ -55,13 +55,20 @@ const transformOf = (canvas: Element) =>
 
 const scaleOf = (canvas: Element) => Number(/scale\(([-\d.e]+)\)/.exec(transformOf(canvas))?.[1]);
 
+/**
+ * A zoom gesture: ctrl-wheel, which is also how a trackpad pinch arrives.
+ *
+ * A bare wheel is deliberately not one -- see the scroll test below -- so
+ * every test that means "zoom" has to hold the modifier, the same as a reader
+ * would.
+ */
 function wheel(canvas: Element, deltaY?: number) {
   // A plain Event carries no deltaY at all, which is the realistic stand-in for
   // an event arriving without usable delta information.
   const event =
     deltaY === undefined
       ? new Event('wheel', { bubbles: true })
-      : new WheelEvent('wheel', { deltaY, bubbles: true });
+      : new WheelEvent('wheel', { deltaY, ctrlKey: true, bubbles: true, cancelable: true });
   fireEvent(canvas, event);
 }
 
@@ -90,11 +97,39 @@ describe('pan and zoom', () => {
     const { canvas } = await renderGraph();
     const before = transformOf(canvas);
 
-    wheel(canvas); // no deltaY at all
-    wheel(canvas, 0); // horizontal-only scroll
+    fireEvent(canvas, new Event('wheel', { bubbles: true })); // no deltaY at all
+    wheel(canvas, 0); // horizontal-only scroll, modifier held
 
     expect(transformOf(canvas)).toBe(before);
     expect(scaleOf(canvas)).toBeCloseTo(1);
+  });
+
+  it('leaves a bare wheel to scroll the page', async () => {
+    const { canvas } = await renderGraph();
+
+    // The map-embed bargain. Without it a reader scrolling past a graph this
+    // tall is stuck zooming it.
+    const scroll = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+    fireEvent(canvas, scroll);
+
+    expect(scaleOf(canvas)).toBeCloseTo(1);
+    expect(scroll.defaultPrevented).toBe(false);
+  });
+
+  it('cancels the zoom gesture so the browser does not zoom the page too', async () => {
+    const { canvas } = await renderGraph();
+
+    // A trackpad pinch reaches the page as exactly this.
+    const pinch = new WheelEvent('wheel', {
+      deltaY: -100,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(canvas, pinch);
+
+    expect(scaleOf(canvas)).toBeGreaterThan(1);
+    expect(pinch.defaultPrevented).toBe(true);
   });
 
   it('pans, and never lets a coordinate-less event poison the transform', async () => {

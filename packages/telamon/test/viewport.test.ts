@@ -12,6 +12,7 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   isPan,
+  isZoomGesture,
   panned,
   viewTransform,
   zoomed,
@@ -38,6 +39,15 @@ describe('zoomed', () => {
     for (const delta of [0, Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number]) {
       expect(zoomed(INITIAL_VIEW, delta)).toBe(INITIAL_VIEW);
     }
+  });
+});
+
+describe('isZoomGesture', () => {
+  it('needs a modifier, so a bare wheel stays the page\'s', () => {
+    expect(isZoomGesture({ ctrlKey: false, metaKey: false })).toBe(false);
+    expect(isZoomGesture({ ctrlKey: true, metaKey: false })).toBe(true);
+    // ⌘ on a Mac, where ctrl is not the scroll modifier readers reach for.
+    expect(isZoomGesture({ ctrlKey: false, metaKey: true })).toBe(true);
   });
 });
 

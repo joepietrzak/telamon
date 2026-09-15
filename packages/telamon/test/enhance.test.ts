@@ -241,6 +241,18 @@ describe('the served graph', () => {
     pointer(target, 'pointerup', 100 + distance, 100);
   }
 
+  /** A zoom gesture: ctrl-wheel, which is also how a trackpad pinch arrives. */
+  function pinch(target: Element, deltaY = -100): WheelEvent {
+    const event = new WheelEvent('wheel', {
+      deltaY,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
   it('arrives laid out, static, and costing a touch reader nothing', async () => {
     await load('/graph');
     const canvas = canvasOf();
@@ -253,7 +265,7 @@ describe('the served graph', () => {
     // belongs to the reader scrolling past.
     expect(canvas.classList.contains('okf-graph-canvas--interactive')).toBe(false);
     drag(canvas, 60);
-    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    pinch(canvas);
     expect(viewportOf()).toBe('translate(0 0) scale(1)');
   });
 
@@ -269,8 +281,23 @@ describe('the served graph', () => {
     expect(viewportOf()).toContain('translate(60 30)');
     pointer(canvas, 'pointerup', 160, 130);
 
-    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    const zoom = pinch(canvas);
     expect(Number(/scale\(([-\d.e]+)\)/.exec(viewportOf())?.[1])).toBeGreaterThan(1);
+    // Uncancelled, the browser zooms the whole page on top of the graph.
+    expect(zoom.defaultPrevented).toBe(true);
+  });
+
+  it('leaves a bare wheel to scroll the page', async () => {
+    await load('/graph');
+    enhancePage();
+    const canvas = canvasOf();
+
+    const scroll = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+    canvas.dispatchEvent(scroll);
+
+    // A reader scrolling past a 620px-tall graph must not be trapped zooming it.
+    expect(viewportOf()).toBe('translate(0 0) scale(1)');
+    expect(scroll.defaultPrevented).toBe(false);
   });
 
   it('does not open a node on the click that ends a pan', async () => {
