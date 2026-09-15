@@ -88,7 +88,7 @@ Liveness is deliberately dumber: an open socket. Pointing liveness at `/health` 
 
 ### Sizing
 
-Memory is roughly **35× the markdown**, because parsed syntax trees are much larger than their source, and every replica pays it in full — nothing is shared between pods. Measured on a bundle of 2000 documents and 8 MB of markdown:
+Size limits from resident memory, which on a bundle of 2000 documents and 8 MB of markdown looks like this:
 
 | | |
 | --- | --- |
@@ -97,11 +97,17 @@ Memory is roughly **35× the markdown**, because parsed syntax trees are much la
 | after the search index builds | 296 MB |
 | after one `/graph` render | 384 MB |
 
-Time, on the same bundle: the read and parse take **5.2 s** (paid at startup, by `warm()`), a warm page **150 ms**, the first search **148 ms** and every one after **4 ms**.
+Roughly 35× the markdown — but **not because the parsed bundle is large**. Retained data is about 25 MB of heap for that bundle, of which the syntax trees are 7 MB. The rest is V8 holding memory it allocated while parsing and never returning it to the OS.
+
+Two things follow. It is a high-water mark rather than a trend: it does not climb with traffic, and each distinct workload (a parse, a search index, a graph render) raises it once. And it is not a leak to hunt — the way to lower it is to parse less at once, not to retain less.
+
+Time, on the same bundle: the read and parse take **5.2 s** (paid at startup, by `warm()`), a warm page **150 ms**, the first search **148 ms** and every one after **4 ms**, the first graph **7.7 s** and every one after **0.24 s**.
 
 ### Two things that will bite at this size
 
-**`/graph` settles a force layout on every request** — **7.5 s** of CPU for 2000 nodes, synchronously, blocking every other request on that pod. Under a CPU limit it is worse. Cache it at the ingress, as the manifest does, or turn it off with `features: { graph: false }`.
+**`/graph` settles a force layout**, and on 2000 nodes that is **7.7 s** of CPU — synchronously, blocking every other request on that pod while it runs. The layout is cached per bundle, so it is paid once and every visit after it costs **0.24 s**; but the first visitor after each pod starts, and after every re-read of the source, pays the whole thing.
+
+If that matters, warm it: ask for `/graph` once yourself after `handler.warm()`, and no visitor ever waits. Caching it at the ingress as the manifest does helps the second pod and the second visitor, not the first. Turning it off with `features: { graph: false }` is the other answer.
 
 **Pages grow with the sidebar**, which lists every document: 560 KB and 150 ms at 2000 documents. That is navigation, not content — the bundle still never travels — but it is the number to watch as a bundle grows, and the reason to think about how the tree is organised.
 

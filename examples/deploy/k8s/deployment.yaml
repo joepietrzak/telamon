@@ -52,10 +52,13 @@ spec:
             failureThreshold: 24 # up to two minutes
 
           resources:
-            # Memory is roughly 35x the markdown, because parsed syntax trees
-            # are much larger than their source, and every replica pays it in
-            # full -- nothing is shared. Measured: an 8 MB bundle of 2000
-            # documents sits at ~300 MB, ~380 MB after a graph render.
+            # Roughly 35x the markdown, and every replica pays it in full.
+            # Measured: an 8 MB bundle of 2000 documents sits at ~300 MB,
+            # ~380 MB after a graph render.
+            #
+            # That is a high-water mark from parsing, not retained data --
+            # about 25 MB of that bundle is actually held. It does not climb
+            # with traffic, so size for the peak and leave it alone.
             #
             # Measure your own bundle and set these from it.
             requests: { cpu: 100m, memory: 512Mi }

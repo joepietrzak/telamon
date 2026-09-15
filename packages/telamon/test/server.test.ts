@@ -179,6 +179,67 @@ describe('serving a bundle', () => {
   });
 });
 
+describe('the concept graph', () => {
+  /** Enough nodes for the force simulation to cost something measurable. */
+  function linkedCorpus(count: number): Record<string, string> {
+    const files: Record<string, string> = { 'index.md': '# Root\n' };
+    for (let i = 0; i < count; i += 1) {
+      files[`metrics/metric_${i}.md`] =
+        `---\ntype: Metric\ntitle: Metric ${i}\n---\n\n` +
+        `Depends on [metric ${(i + 1) % count}](metric_${(i + 1) % count}.md) ` +
+        `and [metric ${(i + 7) % count}](metric_${(i + 7) % count}.md).\n`;
+    }
+    return files;
+  }
+
+  it('settles the layout once per bundle, not once per request', async () => {
+    const handler = createBundleHandler({ source: memorySource(linkedCorpus(250)) });
+
+    const started = performance.now();
+    const first = await handler(get('/graph'));
+    const firstMs = performance.now() - started;
+
+    const restarted = performance.now();
+    const second = await handler(get('/graph'));
+    const secondMs = performance.now() - restarted;
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+
+    // Timing, because a cached layout is observably identical to a recomputed
+    // one -- the simulation is deterministic, which is what makes it cacheable.
+    // The real margin is ~30x; five is enough to catch the cache going away.
+    expect(secondMs * 5).toBeLessThan(firstMs);
+  });
+
+  it('serves the same graph to a reader who has hidden references', async () => {
+    const handler = createBundleHandler({ source: memorySource(linkedCorpus(250)) });
+
+    await handler(get('/graph'));
+    const started = performance.now();
+    const hidden = await handler(get('/graph?references=0'));
+    const hiddenMs = performance.now() - started;
+
+    // The toggle changes the sidebar, not the graph, so it shares the layout.
+    expect(hidden.status).toBe(200);
+    expect(hiddenMs).toBeLessThan(1000);
+  });
+
+  it('drops the layout when the bundle is re-read', async () => {
+    const source = memorySource(linkedCorpus(250));
+    const handler = createBundleHandler({ source });
+
+    await handler(get('/graph'));
+    handler.invalidate();
+
+    // A new parse means a new graph object, so the old layout goes with the
+    // old bundle rather than being served for content that has changed.
+    const after = await handler(get('/graph'));
+    expect(after.status).toBe(200);
+    expect(source.loads).toBe(2);
+  });
+});
+
 describe('the endpoints that replaced the bundle', () => {
   it('answers a search query as JSON', async () => {
     const handler = createBundleHandler({ source: memorySource() });

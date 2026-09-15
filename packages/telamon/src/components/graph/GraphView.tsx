@@ -123,6 +123,33 @@ function layout(graph: Bundle['graph']): { nodes: SimNode[]; links: SimLink[] } 
   return { nodes, links };
 }
 
+/**
+ * Settled layouts, keyed by the graph they were built from.
+ *
+ * The simulation is the expensive part -- hundreds of ticks over every node,
+ * seconds of it on a large bundle -- and it is deterministic, so the result is
+ * worth keeping. `useMemo` covers re-renders within one mount, which is all a
+ * browser needs; a server renders a fresh tree per request and would otherwise
+ * pay the whole cost again on every visit to the graph.
+ *
+ * Keyed weakly on `bundle.graph`, which is built once per parse, so re-reading
+ * the source drops the old layout along with the old bundle. Mirrors how
+ * `getSearchIndex` caches the other expensive derived structure.
+ *
+ * Safe to share: `layout` finishes mutating its nodes and links before it
+ * returns, and nothing downstream writes to them.
+ */
+const LAYOUTS = new WeakMap<Bundle['graph'], { nodes: SimNode[]; links: SimLink[] }>();
+
+function settledLayout(graph: Bundle['graph']): { nodes: SimNode[]; links: SimLink[] } {
+  let settled = LAYOUTS.get(graph);
+  if (!settled) {
+    settled = layout(graph);
+    LAYOUTS.set(graph, settled);
+  }
+  return settled;
+}
+
 interface EdgeGeometry {
   d: string;
   labelX: number;
@@ -185,7 +212,7 @@ export default function GraphView() {
   const navigate = useNavigate();
 
   const markerPrefix = useId().replace(/:/g, '');
-  const { nodes, links } = useMemo(() => layout(bundle.graph), [bundle.graph]);
+  const { nodes, links } = useMemo(() => settledLayout(bundle.graph), [bundle.graph]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [hovered, setHovered] = useState<string | null>(null);
   const dragRef = useRef<{

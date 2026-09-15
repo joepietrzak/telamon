@@ -5,10 +5,12 @@ kind: Ingress
 metadata:
   name: analytics-docs
   annotations:
-    # The graph settles a force layout on every request -- seconds of CPU on a
-    # large bundle -- so it is worth caching. `proxy_cache_valid` alone does
-    # nothing: nginx needs a zone, which is declared once on the controller
-    # rather than here.
+    # The graph settles a force layout -- seconds of CPU on a large bundle.
+    # telamon caches it per bundle, so each pod pays it once; caching here
+    # spreads that across pods and survives a pod restart.
+    #
+    # `proxy_cache_valid` alone does nothing: nginx needs a zone, which is
+    # declared once on the controller rather than here.
     #
     #   # in the ingress-nginx controller ConfigMap
     #   http-snippet: |
