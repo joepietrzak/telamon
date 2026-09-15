@@ -109,7 +109,14 @@ Time, on the same bundle: the read and parse take **5.2 s** (paid at startup, by
 
 If that matters, warm it: ask for `/graph` once yourself after `handler.warm()`, and no visitor ever waits. Caching it at the ingress as the manifest does helps the second pod and the second visitor, not the first. Turning it off with `features: { graph: false }` is the other answer.
 
-**Pages grow with the sidebar**, which lists every document: 560 KB and 150 ms at 2000 documents. That is navigation, not content — the bundle still never travels — but it is the number to watch as a bundle grows, and the reason to think about how the tree is organised.
+**Pages grow with the widest directory on the path.** The sidebar renders only the branch containing the page you are on, so what costs you is how many siblings that branch has — not how large the bundle is. The same 2000 documents, arranged two ways:
+
+| | sidebar | links |
+| --- | --- | --- |
+| one flat `metrics/` directory | 494 KB | 2002 |
+| 50 directories of 40 | 26 KB | 92 |
+
+Nineteen times smaller, from the same corpus, purely from structure. If a page feels heavy, look at the directory it lives in before anything else.
 
 ### If you move to a database source later
 

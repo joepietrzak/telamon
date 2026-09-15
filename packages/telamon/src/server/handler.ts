@@ -19,6 +19,7 @@ import {
 } from './chrome.js';
 import { renderDocument } from './document.js';
 import { ASSET_PREFIX, ENHANCE_SCRIPT_ID, ROOT_ELEMENT_ID, type EnhancePayload } from './ids.js';
+import { navChildren } from './nav.js';
 import { searchBundle } from './search.js';
 
 const SEARCH_LIMIT = 20;
@@ -202,6 +203,16 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
             { status: 503, headers: { 'content-type': 'application/json; charset=utf-8' } },
           );
         }
+      }
+
+      if (endpoint === 'nav.json') {
+        const { bundle } = await loaded();
+        const children = navChildren(bundle, url.searchParams.get('route') ?? '/', {
+          showReferences: url.searchParams.get('references') !== '0',
+          ...(isReference && { isReference }),
+        });
+        if (!children) return new Response('Not found', { status: 404 });
+        return json({ children });
       }
 
       if (endpoint === 'bundle.zip') {

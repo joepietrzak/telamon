@@ -117,6 +117,104 @@ describe('enhancePage', () => {
     expect(document.querySelector('.okf-search-panel')?.hasAttribute('hidden')).toBe(true);
   });
 
+  it('expands a closed directory by fetching that level', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL) =>
+      new Response(
+        JSON.stringify({
+          children: [
+            { route: '/tables/orders', label: 'orders', kind: 'concept', children: false },
+            { route: '/tables/customers', label: 'customers', kind: 'concept', children: false },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    // On a metrics page, so the tables branch arrives closed and empty.
+    await load('/metrics/gross_revenue');
+
+    const tables = [...document.querySelectorAll('.okf-nav-item')].find(
+      (item) => item.querySelector('.okf-nav-link')?.getAttribute('href') === '/tables',
+    )!;
+    const toggle = tables.querySelector<HTMLButtonElement>('.okf-nav-toggle')!;
+
+    // The server sent no children for it, which is what keeps the page small.
+    expect(tables.querySelector('.okf-nav-list')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    // Inert before enhancement: a reader without JavaScript follows the link.
+    toggle.click();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    enhancePage();
+    toggle.click();
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('/_telamon/nav.json?route=%2Ftables');
+
+    await vi.waitFor(() => expect(tables.querySelector('.okf-nav-list')).not.toBeNull());
+
+    // Scoped to the level that was just added: a descendant selector would
+    // also match this item's own link, whose ancestors include the root list.
+    const level = tables.querySelector(':scope > .okf-nav-list')!;
+    const links = [...level.querySelectorAll('.okf-nav-link')];
+    expect(links.map((l) => l.getAttribute('href'))).toEqual([
+      '/tables/orders',
+      '/tables/customers',
+    ]);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('collapses and re-opens without fetching the level twice', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL) =>
+      new Response(
+        JSON.stringify({
+          children: [{ route: '/tables/orders', label: 'orders', kind: 'concept', children: false }],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await load('/metrics/gross_revenue');
+    enhancePage();
+
+    const tables = [...document.querySelectorAll('.okf-nav-item')].find(
+      (item) => item.querySelector('.okf-nav-link')?.getAttribute('href') === '/tables',
+    )!;
+    const toggle = tables.querySelector<HTMLButtonElement>('.okf-nav-toggle')!;
+
+    toggle.click();
+    await vi.waitFor(() => expect(tables.querySelector('.okf-nav-list')).not.toBeNull());
+
+    toggle.click();
+    expect(tables.querySelector<HTMLElement>('.okf-nav-list')!.hidden).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    toggle.click();
+    expect(tables.querySelector<HTMLElement>('.okf-nav-list')!.hidden).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the branch closed when the level cannot be fetched', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+
+    await load('/metrics/gross_revenue');
+    enhancePage();
+
+    const tables = [...document.querySelectorAll('.okf-nav-item')].find(
+      (item) => item.querySelector('.okf-nav-link')?.getAttribute('href') === '/tables',
+    )!;
+    const toggle = tables.querySelector<HTMLButtonElement>('.okf-nav-toggle')!;
+    toggle.click();
+
+    await vi.waitFor(() => expect(toggle.hasAttribute('aria-busy')).toBe(false));
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // And the label beside it still goes to the page that lists the contents.
+    expect(tables.querySelector('.okf-nav-link')?.getAttribute('href')).toBe('/tables');
+  });
+
   it('does nothing at all on a page served without settings', async () => {
     document.body.innerHTML = '<div class="okf-root"></div>';
     expect(() => enhancePage()).not.toThrow();

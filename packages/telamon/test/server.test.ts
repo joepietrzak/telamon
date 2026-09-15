@@ -375,6 +375,55 @@ describe('the endpoints that replaced the bundle', () => {
     expect(source.loads).toBe(1);
   });
 
+  it('serves one level of the navigation tree', async () => {
+    const handler = createBundleHandler({ source: memorySource() });
+    const response = await handler(get('/_telamon/nav.json?route=/metrics'));
+
+    expect(response.status).toBe(200);
+    const level = (await response.json()) as {
+      children: { route: string; label: string; children: boolean }[];
+    };
+
+    expect(level.children.map((c) => c.route)).toEqual([
+      '/metrics/gross_revenue',
+      '/metrics/average_order_value',
+      '/metrics/repeat_purchase_rate',
+    ]);
+    // Leaves say so, so the control knows not to offer an arrow.
+    expect(level.children.every((c) => c.children === false)).toBe(true);
+  });
+
+  it('carries the labels and descriptions the sidebar renders', async () => {
+    const handler = createBundleHandler({ source: memorySource() });
+    const level = (await (await handler(get('/_telamon/nav.json?route=/'))).json()) as {
+      children: { route: string; label: string; description?: string; children: boolean }[];
+    };
+
+    const metrics = level.children.find((c) => c.route === '/metrics')!;
+    expect(metrics.label).toBe('metrics');
+    expect(metrics.description).toContain('Agreed definitions');
+    expect(metrics.children).toBe(true);
+  });
+
+  it('prunes references from a level when the reader has hidden them', async () => {
+    const handler = createBundleHandler({ source: memorySource() });
+
+    const shown = (await (await handler(get('/_telamon/nav.json?route=/'))).json()) as {
+      children: { route: string }[];
+    };
+    const hidden = (await (
+      await handler(get('/_telamon/nav.json?route=/&references=0'))
+    ).json()) as { children: { route: string }[] };
+
+    expect(shown.children.map((c) => c.route)).toContain('/references');
+    expect(hidden.children.map((c) => c.route)).not.toContain('/references');
+  });
+
+  it('404s a level that is not in the tree', async () => {
+    const handler = createBundleHandler({ source: memorySource() });
+    expect((await handler(get('/_telamon/nav.json?route=/nowhere'))).status).toBe(404);
+  });
+
   it('404s an endpoint it does not have', async () => {
     const handler = createBundleHandler({ source: memorySource() });
     expect((await handler(get('/_telamon/nope.json'))).status).toBe(404);

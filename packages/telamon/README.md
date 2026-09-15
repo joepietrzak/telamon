@@ -318,11 +318,12 @@ That is the whole point of the server mode. Only three things ever want the enti
 | `GET /_telamon/search.json?q=` | The same results as JSON, for the enhancement script. |
 | `GET /_telamon/bundle.zip` | The sources, zipped by the server. The download is a plain link. |
 | `GET /_telamon/health` | `200` once the bundle is loadable, `503` while it is not. For a readiness probe. |
+| `GET /_telamon/nav.json?route=` | One level of the navigation tree, for the sidebar's expand control. |
 | the graph | Rendered on the server at `graphRoute`, settled layout and all. |
 
 So a page weighs what the page weighs. Growing every document in a bundle a thousandfold grows a served page by exactly one document — the one it renders.
 
-What *does* scale with the bundle is the sidebar, because it lists every document. That is the navigation being honest rather than a hidden cost, and it is bounded by a link per document rather than a body.
+What does grow is the sidebar, though not with the bundle: it renders the branch containing the current page, so the cost is the number of siblings along that path. A bundle of 2000 documents in one flat directory renders all 2000 of them; the same 2000 across fifty directories renders ninety-odd. Collapsed directories ship nothing, and the expand control fetches a level at a time from `/_telamon/nav.json`.
 
 ### Progressive enhancement, not hydration
 

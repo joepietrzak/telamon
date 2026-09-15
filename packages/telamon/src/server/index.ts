@@ -17,6 +17,8 @@ export {
 
 export { searchBundle, type ServerSearch } from './search.js';
 
+export { navChildren, type NavChild } from './nav.js';
+
 export {
   SearchResultsPage,
   ServerDownloadLink,

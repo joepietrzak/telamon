@@ -60,6 +60,138 @@ function enhanceNav(): void {
   });
 }
 
+/**
+ * Make the sidebar's expand controls work.
+ *
+ * The server renders only the branch containing the current page, so every
+ * other directory arrives closed with nothing behind it -- which keeps a page
+ * small, and leaves the control with nothing to show. This fetches that level
+ * the first time it is asked for.
+ *
+ * Without this the arrows are inert and a reader expands a directory by
+ * visiting it, since the label beside each one is a link to the page that
+ * lists its contents.
+ */
+function enhanceNavTree(config: EnhancePayload): void {
+  const nav = document.querySelector('.okf-nav');
+  if (!nav) return;
+
+  // The state the server rendered is in the URL, so an expanded level matches
+  // the sidebar around it.
+  const references = new URLSearchParams(window.location.search).get('references');
+  const suffix = references === '0' ? '&references=0' : '';
+
+  nav.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest?.('.okf-nav-toggle');
+    if (!(button instanceof HTMLButtonElement) || !nav.contains(button)) return;
+
+    const item = button.closest('.okf-nav-item');
+    const link = item?.querySelector('.okf-nav-link');
+    const route = link?.getAttribute('href');
+    if (!item || !route) return;
+
+    const open = button.getAttribute('aria-expanded') === 'true';
+    const existing = item.querySelector(':scope > .okf-nav-list');
+
+    if (open) {
+      if (existing instanceof HTMLElement) existing.hidden = true;
+      setExpanded(button, false);
+      return;
+    }
+
+    if (existing instanceof HTMLElement) {
+      existing.hidden = false;
+      setExpanded(button, true);
+      return;
+    }
+
+    // Not fetched yet. Say so, so a slow network is not silence.
+    button.setAttribute('aria-busy', 'true');
+    const base = config.basename ?? '';
+    const path = route.startsWith(base) ? route.slice(base.length) || '/' : route;
+
+    void fetch(`${config.assetPrefix}/nav.json?route=${encodeURIComponent(path)}${suffix}`, {
+      headers: { accept: 'application/json' },
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('no level'))))
+      .then((level: { children: NavChildLike[] }) => {
+        item.append(buildLevel(level.children, base));
+        setExpanded(button, true);
+      })
+      .catch(() => {
+        // Leave it closed. The label next to it still navigates, which is what
+        // a reader without JavaScript does anyway.
+      })
+      .finally(() => button.removeAttribute('aria-busy'));
+  });
+}
+
+interface NavChildLike {
+  route: string;
+  label: string;
+  kind: string;
+  description?: string;
+  children: boolean;
+}
+
+function setExpanded(button: HTMLButtonElement, open: boolean): void {
+  button.setAttribute('aria-expanded', String(open));
+  const arrow = button.querySelector('span');
+  if (arrow) arrow.textContent = open ? '\u25be' : '\u25b8';
+  const label = button.getAttribute('aria-label');
+  if (label) {
+    button.setAttribute(
+      'aria-label',
+      label.replace(/^(Expand|Collapse)\b/, open ? 'Collapse' : 'Expand'),
+    );
+  }
+}
+
+/** The same shape `NavTree` renders, so one level looks like any other. */
+function buildLevel(children: NavChildLike[], basename: string): HTMLUListElement {
+  const list = document.createElement('ul');
+  list.className = 'okf-nav-list';
+
+  for (const child of children) {
+    const item = document.createElement('li');
+    item.className = 'okf-nav-item';
+    item.dataset.okfKind = child.kind;
+
+    const row = document.createElement('div');
+    row.className = 'okf-nav-row';
+
+    if (child.children) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'okf-nav-toggle';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-label', `Expand ${child.label}`);
+      const arrow = document.createElement('span');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '\u25b8';
+      toggle.append(arrow);
+      row.append(toggle);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'okf-nav-toggle okf-nav-toggle--empty';
+      spacer.setAttribute('aria-hidden', 'true');
+      row.append(spacer);
+    }
+
+    const link = document.createElement('a');
+    link.className = 'okf-nav-link';
+    link.href = `${basename}${child.route}`;
+    link.textContent = child.label;
+    if (child.description) link.title = child.description;
+    row.append(link);
+
+    item.append(row);
+    list.append(item);
+  }
+
+  return list;
+}
+
 /** Results as you type, over the form that already works without it. */
 function enhanceSearch(config: EnhancePayload): void {
   const form = document.querySelector<HTMLFormElement>('form[role="search"]');
@@ -212,5 +344,8 @@ function enhanceSearch(config: EnhancePayload): void {
 export function enhancePage(): void {
   const config = settings();
   enhanceNav();
-  if (config) enhanceSearch(config);
+  if (config) {
+    enhanceNavTree(config);
+    enhanceSearch(config);
+  }
 }
