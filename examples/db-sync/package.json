@@ -1,0 +1,12 @@
+{
+  "name": "db-sync",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "sync": "pnpm --filter telamon build && node sync.mjs"
+  },
+  "dependencies": {
+    "telamon": "workspace:*"
+  }
+}

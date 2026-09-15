@@ -27,6 +27,12 @@ importers:
         specifier: ^8.16.0
         version: 8.69.0(eslint@9.39.5(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
 
+  examples/db-sync:
+    dependencies:
+      telamon:
+        specifier: workspace:*
+        version: link:../../packages/telamon
+
   examples/playground:
     dependencies:
       react:

@@ -97,6 +97,42 @@ function useRemoteBundle(baseUrl: string) {
 }
 ```
 
+### From a database, on the server
+
+If the knowledge already lives in a warehouse, a JSON file says which tables become which files and `telamon/db` does the rest. It never opens a connection — you pass a query function, so credentials, pooling, and dialect stay yours.
+
+```ts
+// okf.db.json
+{
+  "okfVersion": "0.2",
+  "title": "Acme analytics",
+  "tables": [
+    {
+      "table": "analytics.metric_definitions",
+      "path": "metrics/{metric_name}.md",
+      "type": "Metric",
+      "title": "display_name",
+      "body": "definition_md",
+      "frontmatter": { "description": "summary", "tags": "tags" },
+      "directory": { "title": "Metrics", "description": "Agreed definitions." },
+      "where": "is_published"
+    }
+  ]
+}
+```
+
+```ts
+// a loader, a server component, or a build script
+import { loadBundle } from 'telamon/db';
+
+const { files, diagnostics } = await loadBundle(config, (sql, params) =>
+  pool.query(sql, params),
+);
+// -> <OkfSite bundle={files} />
+```
+
+`files` is the same path → contents map as any other route into the library, so nothing downstream knows the difference. Run it per request for always-fresh pages, or once at build time and write the result out as a checked-in bundle. Full mapping reference in the [README](../README.md#reading-a-bundle-out-of-a-database).
+
 > **Give the map a stable identity.** `<OkfSite bundle={{ 'a.md': '…' }} />` builds a new object every render, and every new object re-parses the whole bundle. Define it at module scope, or `useMemo` it.
 
 ---

@@ -1,0 +1,61 @@
+{
+  "okfVersion": "0.2",
+  "title": "Acme storefront analytics",
+  "tables": [
+    {
+      "table": "warehouse_tables",
+      "path": "tables/{table_name}.md",
+      "type": "Table",
+      "title": "table_name",
+      "template": "Grain: one row per {grain}.\n\nApproximately {row_estimate} rows at last count.",
+      "frontmatter": {
+        "description": "notes",
+        "resource": "fqn"
+      },
+      "directory": {
+        "title": "Tables",
+        "description": "Warehouse tables backing the storefront analytics."
+      },
+      "orderBy": "table_name"
+    },
+    {
+      "table": "metric_definitions",
+      "path": "metrics/{metric_name}.md",
+      "type": "Metric",
+      "title": "display_name",
+      "body": "definition_md",
+      "frontmatter": {
+        "description": "summary",
+        "tags": "tags",
+        "status": "lifecycle",
+        "stale_after": "review_by"
+      },
+      "json": ["tags"],
+      "constants": {
+        "generated": { "by": "process:warehouse-sync" }
+      },
+      "directory": {
+        "title": "Metrics",
+        "description": "Agreed definitions for the numbers leadership reads."
+      },
+      "where": "is_published = 1",
+      "orderBy": "metric_name"
+    },
+    {
+      "table": "pipelines",
+      "path": "pipelines/{pipeline_name}.md",
+      "type": "Pipeline",
+      "title": "display_name",
+      "body": "definition_md",
+      "frontmatter": {
+        "description": "summary",
+        "schedule": "schedule"
+      },
+      "directory": {
+        "title": "Pipelines",
+        "description": "Jobs that populate the warehouse."
+      },
+      "orderBy": "pipeline_name"
+    }
+  ]
+}

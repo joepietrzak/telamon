@@ -110,6 +110,7 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Rela
 - **Typed relationships** — see below.
 - **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. The graph is code-split, so `d3-force` never lands in your main chunk, and it ships an equivalent text listing for keyboard and screen-reader use.
 - **A references toggle** — see below.
+- **A database source** — see below.
 - **A source download** — a header button that hands back every file in the bundle as a ZIP. The bundle is already in memory, so nothing is fetched and the archive is built on click; a reader who wants the markdown behind a page never has to go find the repository.
 
 Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false, download: false }}`.
@@ -178,6 +179,81 @@ What you get:
 - **A diagnostic**, not an exception, when a target does not resolve (`broken-relationship`) or an entry is malformed (`invalid-relationship`). The rest of the entries still work, and the page still renders.
 
 Read them yourself from `doc.frontmatter.relationships`, and the resulting edges from `bundle.graph.edges` — each carries `directed` and, for typed edges, `type`.
+
+## Reading a bundle out of a database
+
+A bundle is a filesystem, so pointing telamon at a database is a question of naming: which rows become which files, and which columns become frontmatter. That is data rather than code, so it lives in a JSON file you can keep beside the bundle and diff:
+
+```json
+{
+  "okfVersion": "0.2",
+  "title": "Acme analytics",
+  "tables": [
+    {
+      "table": "analytics.metric_definitions",
+      "path": "metrics/{metric_name}.md",
+      "type": "Metric",
+      "title": "display_name",
+      "body": "definition_md",
+      "frontmatter": {
+        "description": "summary",
+        "tags": "tags",
+        "status": "lifecycle",
+        "stale_after": "review_by"
+      },
+      "constants": { "generated": { "by": "process:warehouse-sync" } },
+      "directory": { "title": "Metrics", "description": "Agreed definitions for the numbers leadership reads." },
+      "where": "is_published",
+      "orderBy": "metric_name"
+    }
+  ]
+}
+```
+
+`telamon/db` is Node-side and driver-free. It hands you SQL and takes rows back, so the pool, the credentials, the retries, and the dialect all stay where they already are — and the same config works against Postgres, MySQL, SQLite, BigQuery, or anything else you can query:
+
+```ts
+import { loadBundle } from 'telamon/db';
+
+const config = JSON.parse(await readFile('okf.db.json', 'utf8'));
+
+export async function loader() {
+  const { files, diagnostics } = await loadBundle(config, (sql, params) => pool.query(sql, params));
+  return { files, diagnostics };
+}
+
+// -> <OkfSite bundle={files} />
+```
+
+What comes back is the same `Record<path, contents>` map `OkfSite` already takes, so routing, search, backlinks, the graph, and the source download work on a database-backed bundle exactly as on a checked-in one.
+
+### The mapping
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `table` | `string` | Source table, optionally schema-qualified. Plain identifiers only. |
+| `sql` | `string` | Whole statement, for anything a table plus `where` cannot express. Wins over `table`. |
+| `path` | `string` | Destination template. `{column}` is filled per row and slugified; at least one is required, or every row would collide. |
+| `type` | `string` | Literal OKF `type` for every document the mapping produces. |
+| `title` | `string` | Column holding the title. Falls back to the humanized filename. |
+| `body` | `string` | Column holding the markdown body. |
+| `template` | `string` | Body composed from `{column}` values, for tables that hold facts rather than prose. Wins over `body`. |
+| `frontmatter` | `Record<string, string>` | Frontmatter key → column name. `null` columns are omitted rather than written empty. |
+| `json` | `string[]` | Columns holding JSON text, parsed before they become frontmatter. Postgres returns a real array for `tags`; SQLite, MySQL, and BigQuery return a string. |
+| `constants` | `Record<string, unknown>` | Frontmatter key → fixed value, merged over the column-derived keys. |
+| `directory` | `{ title?, description? }` | Describes the directory this mapping fills, for the generated indexes. |
+| `where`, `orderBy`, `limit` | | Appended to the generated statement. |
+
+Top level: `okfVersion`, `title` (the root heading, and so the site title), `generateIndexes`, and `tables`.
+
+A worked example — a SQLite warehouse, the mapping above it, and a script that syncs one into a bundle — lives in [`examples/db-sync`](../../examples/db-sync).
+
+### What it does with the rows
+
+- **Indexes are synthesized** for the root and every mapped directory (SPEC §8), so the sidebar gets authored order and one-line descriptions rather than a bare directory listing. A mapping that writes its own `index.md` is left alone; `generateIndexes: false` turns the whole thing off.
+- **Database types become YAML** — dates as ISO-8601, arrays as lists, `null` omitted, and JSON-text columns parsed where `json` names them.
+- **A bad config throws**, at startup and before the database is touched: a mistyped table name is wiring, and failing loudly beats rendering a bundle quietly missing a table.
+- **Bad data does not.** A row whose path column the query did not return, two rows landing on the same path, a table that came back empty — each is a `DbDiagnostic`, and the rest of the bundle still renders. Same bargain `parseBundle` makes.
 
 ## Conformance and leniency
 

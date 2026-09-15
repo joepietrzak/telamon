@@ -20,6 +20,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./db": {
+      "types": "./dist/db/index.d.ts",
+      "import": "./dist/db/index.js",
+      "require": "./dist/db/index.cjs"
+    },
     "./styles.css": "./dist/styles.css",
     "./tokens.css": "./dist/tokens.css",
     "./package.json": "./package.json"
