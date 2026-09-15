@@ -637,6 +637,107 @@ describe('refreshing', () => {
   });
 });
 
+describe('refreshing from a source that knows what changed', () => {
+  /** A source with a cursor, so the handler takes the incremental path. */
+  function trackingSource(files: Record<string, string> = demo) {
+    const source: BundleSource & {
+      files: Record<string, string>;
+      fullReads: number;
+      incrementalReads: number;
+      pending: { changed: Record<string, string>; deleted: string[] };
+    } = {
+      name: 'tracking',
+      files,
+      fullReads: 0,
+      incrementalReads: 0,
+      pending: { changed: {}, deleted: [] },
+      load: async () => {
+        source.fullReads += 1;
+        return { files: source.files, diagnostics: [], cursor: 'v1' };
+      },
+      loadChanged: async () => {
+        source.incrementalReads += 1;
+        const { changed, deleted } = source.pending;
+        source.pending = { changed: {}, deleted: [] };
+        return { changed, deleted, diagnostics: [], cursor: 'v2' };
+      },
+    };
+    return source;
+  }
+
+  it('asks only for what changed', async () => {
+    const source = trackingSource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+    expect(source.fullReads).toBe(1);
+
+    source.pending = {
+      changed: {
+        'metrics/gross_revenue.md': demo['metrics/gross_revenue.md']!.replace(
+          'title: Gross revenue',
+          'title: Gross revenue (restated)',
+        ),
+      },
+      deleted: [],
+    };
+
+    expect(await handler.refresh()).toBe(1);
+    expect(source.incrementalReads).toBe(1);
+    // The whole source was never re-read.
+    expect(source.fullReads).toBe(1);
+    expect(await (await handler(get('/metrics/gross_revenue'))).text()).toContain(
+      'Gross revenue (restated)',
+    );
+  });
+
+  it('applies a deletion the source does report', async () => {
+    const source = trackingSource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    source.pending = { changed: {}, deleted: ['metrics/gross_revenue.md'] };
+    expect(await handler.refresh()).toBe(1);
+    expect((await handler(get('/metrics/gross_revenue'))).status).toBe(404);
+  });
+
+  it('reads everything when asked to reconcile', async () => {
+    const source = trackingSource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    const remaining = { ...demo };
+    delete remaining['metrics/gross_revenue.md'];
+    source.files = remaining;
+    // The incremental path would report nothing: it cannot see deletions.
+    expect(await handler.refresh()).toBe(0);
+    expect((await handler(get('/metrics/gross_revenue'))).status).toBe(200);
+
+    expect(await handler.refresh({ full: true })).toBe(1);
+    expect(source.fullReads).toBe(2);
+    expect((await handler(get('/metrics/gross_revenue'))).status).toBe(404);
+  });
+
+  it('carries the cursor forward even when nothing moved', async () => {
+    const source = trackingSource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    expect(await handler.refresh()).toBe(0);
+    expect(await handler.refresh()).toBe(0);
+    expect(source.incrementalReads).toBe(2);
+  });
+
+  it('falls back to a full read for a source that cannot say', async () => {
+    // memorySource returns no cursor, so there is nothing to resume from.
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    await handler.refresh();
+    expect(source.loads).toBe(2);
+  });
+});
+
 describe('HTTP manners', () => {
   it('answers HEAD with the headers but no body', async () => {
     const handler = createBundleHandler({ source: memorySource() });

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -120,6 +120,103 @@ describe('fileSource', () => {
     expect(Object.keys(followed.files).sort()).toEqual(['index.md', 'real/page.md']);
   });
 
+  it('hands back a cursor to resume from', async () => {
+    const root = await scratch({ 'index.md': '# Root\n' });
+    const { cursor } = await fileSource(root).load();
+    expect(typeof cursor).toBe('number');
+  });
+});
+
+describe('fileSource.loadChanged', () => {
+  /**
+   * Modification times have coarse resolution on some filesystems, so a file
+   * written moments after a cursor can share its timestamp. Stamping
+   * explicitly keeps these tests about the logic rather than the clock.
+   */
+  async function touch(root: string, path: string, mtimeMs: number) {
+    const when = new Date(mtimeMs);
+    await utimes(join(root, path), when, when);
+  }
+
+  it('reads only what was written since the cursor', async () => {
+    const root = await scratch({
+      'index.md': '# Root\n',
+      'a.md': '---\ntype: Metric\n---\n\nOne.\n',
+      'b.md': '---\ntype: Metric\n---\n\nTwo.\n',
+    });
+    const source = fileSource(root);
+
+    await touch(root, 'index.md', 1_000);
+    await touch(root, 'a.md', 1_000);
+    await touch(root, 'b.md', 1_000);
+    const first = await source.load();
+    expect(Object.keys(first.files).sort()).toEqual(['a.md', 'b.md', 'index.md']);
+
+    await writeFile(join(root, 'b.md'), '---\ntype: Metric\n---\n\nTwo, revised.\n', 'utf8');
+    await touch(root, 'b.md', 5_000);
+
+    const changes = await source.loadChanged!(first.cursor!);
+    expect(Object.keys(changes.changed)).toEqual(['b.md']);
+    expect(changes.changed['b.md']).toContain('revised');
+    expect(changes.deleted).toEqual([]);
+    expect(changes.cursor).toBe(5_000);
+  });
+
+  it('sees a deletion, because it walks the tree either way', async () => {
+    const root = await scratch({ 'index.md': '# Root\n', 'gone.md': '---\ntype: Metric\n---\n\nHere.\n' });
+    const source = fileSource(root);
+    const first = await source.load();
+
+    await rm(join(root, 'gone.md'));
+
+    const changes = await source.loadChanged!(first.cursor!);
+    expect(changes.deleted).toEqual(['gone.md']);
+    expect(Object.keys(changes.changed)).toEqual([]);
+  });
+
+  it('sees a file added after the cursor', async () => {
+    const root = await scratch({ 'index.md': '# Root\n' });
+    const source = fileSource(root);
+    await touch(root, 'index.md', 1_000);
+    const first = await source.load();
+
+    await writeFile(join(root, 'new.md'), '---\ntype: Metric\n---\n\nNew.\n', 'utf8');
+    await touch(root, 'new.md', 9_000);
+
+    const changes = await source.loadChanged!(first.cursor!);
+    expect(Object.keys(changes.changed)).toEqual(['new.md']);
+    expect(changes.cursor).toBe(9_000);
+  });
+
+  it('reports nothing, and holds its place, when nothing moved', async () => {
+    const root = await scratch({ 'index.md': '# Root\n', 'a.md': '---\ntype: Metric\n---\n\nOne.\n' });
+    const source = fileSource(root);
+    await touch(root, 'index.md', 1_000);
+    await touch(root, 'a.md', 1_000);
+    const first = await source.load();
+
+    const changes = await source.loadChanged!(first.cursor!);
+    expect(changes.changed).toEqual({});
+    expect(changes.deleted).toEqual([]);
+    expect(changes.cursor).toBe(first.cursor);
+  });
+
+  it('still applies ignore rules and the size ceiling', async () => {
+    const root = await scratch({ 'index.md': '# Root\n' });
+    const source = fileSource(root, { ignore: ['drafts/**'] });
+    await touch(root, 'index.md', 1_000);
+    const first = await source.load();
+
+    await mkdir(join(root, 'drafts'), { recursive: true });
+    await writeFile(join(root, 'drafts', 'wip.md'), '---\ntype: Metric\n---\n\nWip.\n', 'utf8');
+    await touch(root, 'drafts/wip.md', 9_000);
+
+    const changes = await source.loadChanged!(first.cursor!);
+    expect(Object.keys(changes.changed)).toEqual([]);
+  });
+});
+
+describe('fileSource naming', () => {
   it('names itself for logs', () => {
     expect(fileSource('./bundle').name).toBe('./bundle');
   });

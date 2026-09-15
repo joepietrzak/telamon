@@ -1,5 +1,6 @@
 import { parseDbConfig, type DbConfig, type Row, type TableMapping } from './config.js';
-import { rowsToFiles, type MappedBundle } from './mapping.js';
+import type { SourceCursor } from '../source/types.js';
+import { rowsToFiles, type DbDiagnostic, type MappedBundle } from './mapping.js';
 
 /**
  * Whatever a driver hands back: an array of rows, or a result object holding
@@ -70,4 +71,105 @@ export async function loadBundle(
   );
 
   return rowsToFiles(parsed, results);
+}
+
+/**
+ * How this engine writes a bound parameter.
+ *
+ * There is no portable answer -- `?` for SQLite and MySQL, `$1` for Postgres,
+ * `@p1` for SQL Server -- and telamon has no way to know which it is talking
+ * to. Defaults to `?`.
+ */
+export type Placeholder = (index: number) => string;
+
+const QUESTION_MARK: Placeholder = () => '?';
+
+/** True when every mapping can say what changed, which is what `loadChanged` needs. */
+export function tracksChanges(config: DbConfig): boolean {
+  return config.tables.length > 0 && config.tables.every((m) => m.changedColumn !== undefined);
+}
+
+/**
+ * The statement for one mapping's changes since a cursor.
+ *
+ * Exported so a config can be checked, and read, without a database.
+ */
+export function buildChangedStatement(
+  mapping: TableMapping,
+  placeholder: Placeholder = QUESTION_MARK,
+): string {
+  const conditions = [
+    ...(mapping.where !== undefined ? [`(${mapping.where})`] : []),
+    `${mapping.changedColumn} > ${placeholder(1)}`,
+  ];
+  const parts = [`select * from ${mapping.table}`, `where ${conditions.join(' and ')}`];
+  if (mapping.orderBy !== undefined) parts.push(`order by ${mapping.orderBy}`);
+  if (mapping.limit !== undefined) parts.push(`limit ${mapping.limit}`);
+  return parts.join(' ');
+}
+
+/** The furthest-forward value seen, which is where the next read resumes. */
+function advance(current: SourceCursor, rows: Row[], column: string): SourceCursor {
+  let cursor = current;
+  for (const row of rows) {
+    const value = row[column];
+    const normalized =
+      value instanceof Date ? value.toISOString() : typeof value === 'number' ? value : String(value ?? '');
+    if (normalized > cursor) cursor = normalized;
+  }
+  return cursor;
+}
+
+export interface ChangedBundle {
+  /** Documents whose rows changed. Never index files -- see below. */
+  files: Record<string, string>;
+  diagnostics: DbDiagnostic[];
+  cursor: SourceCursor;
+}
+
+/**
+ * Read the documents whose rows changed since a cursor.
+ *
+ * Two things this deliberately does not do, both of which need to be read
+ * together with `loadBundle`.
+ *
+ * It does not regenerate the synthesized `index.md` files. Those are built from
+ * every row in a directory, and rebuilding them from a handful of changed rows
+ * would replace good listings with truncated ones. Leaving them alone means a
+ * renamed document keeps its old label in its directory's listing until a full
+ * read -- stale, rather than wrong.
+ *
+ * And it does not report deletions. A query for what changed cannot return a
+ * row that is no longer there, and a row that stopped matching `where` -- a
+ * metric that was unpublished -- looks the same as one that was never touched.
+ *
+ * So this is an optimisation for the common case, edits to documents that go on
+ * existing. Pair it with a periodic full read to reconcile the rest.
+ */
+export async function loadChangedBundle(
+  config: DbConfig | unknown,
+  query: QueryFn,
+  since: SourceCursor,
+  options: { placeholder?: Placeholder } = {},
+): Promise<ChangedBundle> {
+  const parsed = parseDbConfig(config);
+  if (!tracksChanges(parsed)) {
+    throw new TypeError(
+      'loadChangedBundle needs every mapping to declare `changedColumn`; otherwise a read would silently miss whole tables.',
+    );
+  }
+
+  let cursor = since;
+  const results = await Promise.all(
+    parsed.tables.map(async (mapping) => {
+      const statement = buildChangedStatement(mapping, options.placeholder);
+      const rows = toRows(await query(statement, [since]), statement);
+      cursor = advance(cursor, rows, mapping.changedColumn!);
+      return rows;
+    }),
+  );
+
+  // Indexes are built from every row, so they are left to a full read.
+  const { files, diagnostics } = rowsToFiles({ ...parsed, generateIndexes: false }, results);
+  return { files, diagnostics, cursor };
 }

@@ -21,6 +21,16 @@ export {
   type MappedBundle,
 } from './mapping.js';
 
-export { buildStatement, loadBundle, type QueryFn, type QueryResult } from './load.js';
+export {
+  buildChangedStatement,
+  buildStatement,
+  loadBundle,
+  loadChangedBundle,
+  tracksChanges,
+  type ChangedBundle,
+  type Placeholder,
+  type QueryFn,
+  type QueryResult,
+} from './load.js';
 
-export { databaseSource } from './source.js';
+export { databaseSource, type DatabaseSourceOptions } from './source.js';

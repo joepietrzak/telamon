@@ -10,7 +10,7 @@ import { OkfProvider, OkfSite, type OkfSiteProps } from '../components/OkfSite.j
 import GraphView from '../components/graph/GraphView.js';
 import type { OkfFeatures, OkfSlots } from '../components/slots.js';
 import { createHistoryRouter } from '../router/history.js';
-import type { BundleSource, SourceDiagnostic } from '../source/types.js';
+import type { BundleSource, SourceCursor, SourceDiagnostic } from '../source/types.js';
 import {
   ServerDownloadLink,
   ServerReferencesToggle,
@@ -64,6 +64,16 @@ export interface BundleHandlerOptions {
   }) => void;
 }
 
+export interface RefreshOptions {
+  /**
+   * Read the whole source rather than asking what changed.
+   *
+   * The reconciling path: it sees deletions, and rebuilds anything the
+   * incremental read leaves alone.
+   */
+  full?: boolean;
+}
+
 export interface BundleHandler {
   (request: Request): Promise<Response>;
   /**
@@ -87,10 +97,16 @@ export interface BundleHandler {
    * full re-read costs seconds -- which is what makes refreshing often enough
    * to feel live affordable at all.
    *
+   * When the source can say what changed, only that is read -- so the query
+   * shrinks as well as the parse. That answer can be narrower than the truth:
+   * a database sees edits but not deletions, and leaves synthesized index
+   * files alone. `refresh({ full: true })` reads everything and reconciles,
+   * which is worth doing on a slower cycle underneath.
+   *
    * Resolves once the new bundle is in place. Returns the number of files that
    * were re-parsed, for logging.
    */
-  refresh(): Promise<number>;
+  refresh(options?: RefreshOptions): Promise<number>;
   /** Drop the cached bundle, so the next request re-reads and re-parses it all. */
   invalidate(): void;
   /** Stop watching the source. */
@@ -100,6 +116,8 @@ export interface BundleHandler {
 interface Loaded {
   bundle: Bundle;
   files: Record<string, string>;
+  /** Where the source got to, when it can resume. */
+  cursor?: SourceCursor;
 }
 
 const html = (body: string, status: number) =>
@@ -153,10 +171,10 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
   let cached: Promise<Loaded> | undefined;
 
   async function build(): Promise<Loaded> {
-    const { files, diagnostics } = await source.load();
+    const { files, diagnostics, cursor } = await source.load();
     const bundle = parseBundle(files);
     onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
-    return { bundle, files };
+    return { bundle, files, ...(cursor !== undefined && { cursor }) };
   }
 
   function loaded(): Promise<Loaded> {
@@ -353,7 +371,7 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
   handler.warm = async () => {
     await loaded();
   };
-  handler.refresh = async () => {
+  handler.refresh = async (refreshOptions: RefreshOptions = {}) => {
     // Nothing loaded yet: a first read is the cheapest possible refresh.
     if (cached === undefined) {
       await loaded();
@@ -361,15 +379,40 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
     }
 
     const current = await cached;
-    const { files, diagnostics } = await source.load();
+    const incremental =
+      refreshOptions.full !== true && source.loadChanged !== undefined && current.cursor !== undefined;
+
+    if (incremental) {
+      const { changed, deleted, diagnostics, cursor } = await source.loadChanged!(current.cursor!);
+      const moved = Object.keys(changed).length + deleted.length;
+      if (moved === 0) {
+        // Still record where the source got to, so the next ask is narrower.
+        cached = Promise.resolve({ ...current, cursor });
+        return 0;
+      }
+
+      const files = { ...current.files };
+      for (const path of deleted) delete files[path];
+      Object.assign(files, changed);
+
+      const bundle = updateBundle(current.bundle, { changed, deleted });
+      onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
+      cached = Promise.resolve({ bundle, files, cursor });
+      return moved;
+    }
+
+    const { files, diagnostics, cursor } = await source.load();
     const changes = diffFiles(current.files, files);
     const reparsed = Object.keys(changes.changed ?? {}).length + (changes.deleted?.length ?? 0);
 
-    if (reparsed === 0) return 0;
+    if (reparsed === 0) {
+      cached = Promise.resolve({ ...current, ...(cursor !== undefined && { cursor }) });
+      return 0;
+    }
 
     const bundle = updateBundle(current.bundle, changes);
     onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
-    cached = Promise.resolve({ bundle, files });
+    cached = Promise.resolve({ bundle, files, ...(cursor !== undefined && { cursor }) });
     return reparsed;
   };
   handler.invalidate = () => {

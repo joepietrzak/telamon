@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseBundle } from '../src/index.js';
 import {
+  buildChangedStatement,
   buildStatement,
+  databaseSource,
   loadBundle,
+  loadChangedBundle,
   parseDbConfig,
   rowsToFiles,
+  tracksChanges,
   type DbConfig,
   type Row,
 } from '../src/db/index.js';
@@ -379,5 +383,141 @@ describe('loadBundle', () => {
     await expect(loadBundle(config, () => 'nope' as never)).rejects.toThrow(
       /neither an array of rows nor a \{ rows \} result/,
     );
+  });
+});
+
+
+/* ------------------------------------------------------ reading what changed */
+
+const tracked: DbConfig = {
+  okfVersion: '0.2',
+  title: 'Acme analytics',
+  tables: [
+    {
+      table: 'analytics.metric_definitions',
+      path: 'metrics/{metric_name}.md',
+      type: 'Metric',
+      title: 'display_name',
+      body: 'definition_md',
+      frontmatter: { description: 'summary' },
+      changedColumn: 'updated_at',
+      where: 'is_published',
+      directory: { title: 'Metrics' },
+    },
+  ],
+};
+
+describe('change tracking', () => {
+  it('recognises a config that can say what changed', () => {
+    expect(tracksChanges(tracked)).toBe(true);
+    expect(tracksChanges(config)).toBe(false);
+  });
+
+  it('asks for rows past the cursor, keeping the mapping\u2019s own filter', () => {
+    expect(buildChangedStatement(tracked.tables[0]!)).toBe(
+      'select * from analytics.metric_definitions where (is_published) and updated_at > ?',
+    );
+  });
+
+  it('writes the placeholder the engine expects', () => {
+    expect(buildChangedStatement(tracked.tables[0]!, (i) => `$${i}`)).toBe(
+      'select * from analytics.metric_definitions where (is_published) and updated_at > $1',
+    );
+  });
+
+  it('refuses to bolt a predicate onto a statement it did not build', () => {
+    expect(() =>
+      parseDbConfig({
+        tables: [{ sql: 'select * from a join b', path: '{id}.md', changedColumn: 'updated_at' }],
+      }),
+    ).toThrow(/cannot combine/);
+  });
+
+  it('rejects a change column that is not a plain column name', () => {
+    expect(() =>
+      parseDbConfig({
+        tables: [{ table: 't', path: '{x}.md', changedColumn: 'updated_at; drop table t' }],
+      }),
+    ).toThrow(/plain column name/);
+  });
+
+  it('reads the rows past the cursor and moves it forward', async () => {
+    const query = vi.fn(async () => [
+      {
+        metric_name: 'gross_revenue',
+        display_name: 'Gross revenue',
+        summary: 'Total charged.',
+        definition_md: 'Sums it up.',
+        updated_at: '2026-09-15T10:00:00Z',
+      },
+      {
+        metric_name: 'net_revenue',
+        display_name: 'Net revenue',
+        summary: 'After refunds.',
+        definition_md: 'Less refunds.',
+        updated_at: '2026-09-15T11:30:00Z',
+      },
+    ]);
+
+    const changed = await loadChangedBundle(tracked, query, '2026-09-15T09:00:00Z');
+
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('updated_at > ?'), [
+      '2026-09-15T09:00:00Z',
+    ]);
+    expect(Object.keys(changed.files).sort()).toEqual([
+      'metrics/gross_revenue.md',
+      'metrics/net_revenue.md',
+    ]);
+    // The furthest-forward value seen, not the time of the read.
+    expect(changed.cursor).toBe('2026-09-15T11:30:00Z');
+  });
+
+  it('leaves the synthesized indexes alone', async () => {
+    const query = vi.fn(async () => [
+      {
+        metric_name: 'gross_revenue',
+        display_name: 'Gross revenue',
+        summary: 'Total charged.',
+        definition_md: 'Sums it up.',
+        updated_at: '2026-09-15T10:00:00Z',
+      },
+    ]);
+
+    const changed = await loadChangedBundle(tracked, query, '');
+
+    // Rebuilding `metrics/index.md` from one changed row would replace a good
+    // listing with a listing of one.
+    expect(Object.keys(changed.files)).toEqual(['metrics/gross_revenue.md']);
+  });
+
+  it('holds the cursor where it was when nothing changed', async () => {
+    const changed = await loadChangedBundle(tracked, async () => [], '2026-09-15T09:00:00Z');
+    expect(changed.files).toEqual({});
+    expect(changed.cursor).toBe('2026-09-15T09:00:00Z');
+  });
+
+  it('refuses when a mapping cannot say what changed', async () => {
+    await expect(loadChangedBundle(config, async () => [], '')).rejects.toThrow(
+      /every mapping to declare/,
+    );
+  });
+});
+
+describe('databaseSource', () => {
+  it('offers loadChanged only when the config supports it', () => {
+    expect(databaseSource(tracked, async () => []).loadChanged).toBeInstanceOf(Function);
+    expect(databaseSource(config, async () => []).loadChanged).toBeUndefined();
+  });
+
+  it('starts the cursor before every row, so the first ask misses nothing', async () => {
+    const source = databaseSource(tracked, async () => []);
+    const { cursor } = await source.load();
+    expect(cursor).toBe('');
+  });
+
+  it('reports no deletions, because a query for changes cannot see them', async () => {
+    const source = databaseSource(tracked, async () => []);
+    const changes = await source.loadChanged!('');
+    expect(changes.deleted).toEqual([]);
   });
 });

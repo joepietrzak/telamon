@@ -25,6 +25,28 @@ export interface SourceResult {
   files: Record<string, string>;
   /** Problems reading the source. Never a reason to have thrown. */
   diagnostics: SourceDiagnostic[];
+  /**
+   * Where this read got to, to hand back to `loadChanged`.
+   *
+   * Only sources that can answer "what changed since" return one. Its meaning
+   * is the source's own -- a modification time, a sequence number, a snapshot
+   * id -- and nothing outside the source should interpret it.
+   */
+  cursor?: SourceCursor;
+}
+
+/** Opaque to everything but the source that issued it. */
+export type SourceCursor = string | number;
+
+export interface SourceChanges {
+  /** Files added or modified since the cursor. */
+  changed: Record<string, string>;
+  /** Files removed since the cursor, where the source can tell. */
+  deleted: string[];
+  /** Problems reading. */
+  diagnostics: SourceDiagnostic[];
+  /** Where to resume next time. Unchanged when nothing moved. */
+  cursor: SourceCursor;
 }
 
 export interface BundleSource {
@@ -37,4 +59,17 @@ export interface BundleSource {
    * callers must cope with its absence.
    */
   watch?(onChange: () => void): () => void;
+  /**
+   * Report what changed since a cursor a previous read returned.
+   *
+   * Optional, and an optimisation rather than a correctness requirement: a
+   * caller without it re-reads everything and compares, which costs a full
+   * read but yields the same answer. Implement it when the read itself is the
+   * expensive part -- a query against a warehouse, a walk of a large tree.
+   *
+   * Whether deletions can be reported is the source's business. One that
+   * cannot see them says so by never listing any, and the caller reconciles
+   * with a periodic full read.
+   */
+  loadChanged?(since: SourceCursor): Promise<SourceChanges>;
 }

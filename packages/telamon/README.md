@@ -240,6 +240,7 @@ What comes back is the same `Record<path, contents>` map `OkfSite` already takes
 | `body` | `string` | Column holding the markdown body. |
 | `template` | `string` | Body composed from `{column}` values, for tables that hold facts rather than prose. Wins over `body`. |
 | `frontmatter` | `Record<string, string>` | Frontmatter key → column name. `null` columns are omitted rather than written empty. |
+| `changedColumn` | `string` | Column that moves forward whenever a row changes — an `updated_at`, a version, a sequence. Declaring it on every mapping lets the source read only what changed. Cannot be combined with `sql`. |
 | `json` | `string[]` | Columns holding JSON text, parsed before they become frontmatter. Postgres returns a real array for `tags`; SQLite, MySQL, and BigQuery return a string. |
 | `constants` | `Record<string, unknown>` | Frontmatter key → fixed value, merged over the column-derived keys. |
 | `directory` | `{ title?, description? }` | Describes the directory this mapping fills, for the generated indexes. |
@@ -390,6 +391,40 @@ The floor is about 70 ms, and it earns its keep: every document's links are re-r
 The updated bundle is a new object and the previous one is left untouched, so a request rendering from the old bundle finishes against a consistent view. When the concept graph is unchanged the previous graph object is carried over — which matters more than it sounds, because the settled force layout is cached against that object's identity and re-settling it would cost more than the whole refresh.
 
 `refresh()` resolves to the number of files it took in, and rejects if the source read failed, leaving the bundle you already had in place and still being served.
+
+#### Asking only for what changed
+
+Everything above makes the *parse* cheap. The read can be made cheap too, for a source that can answer "what changed since". `fileSource` always can — it walks the tree either way, so it reads only files written since it last looked, and sees deletions for free. A database can when every mapping declares a `changedColumn`:
+
+```json
+{
+  "table": "analytics.metric_definitions",
+  "path": "metrics/{metric_name}.md",
+  "changedColumn": "updated_at",
+  "where": "is_published"
+}
+```
+
+```ts
+// `?` by default; Postgres wants $1.
+databaseSource(config, query, { placeholder: (i) => `$${i}` });
+```
+
+`refresh()` then uses it automatically. **Two limits to read before you rely on it**, both of which come from what a "changed since" query can and cannot see:
+
+- **A database source reports no deletions.** A query for what changed cannot return a row that is gone, and a row that stopped matching `where` — a metric that was unpublished — looks exactly like one nobody touched.
+- **It leaves the synthesized `index.md` files alone.** Those are built from every row in a directory, so rebuilding them from a handful of changed rows would replace a good listing with a listing of one. A renamed document keeps its old label in its directory's listing until a full read — stale rather than wrong.
+
+So pair it with a slower reconciling cycle:
+
+```ts
+setInterval(() => void handler.refresh(), 10_000);              // edits, cheaply
+setInterval(() => void handler.refresh({ full: true }), 300_000); // deletions and indexes
+```
+
+`fileSource` has neither limit: it sees deletions, and a bundle's index files are real files it reads like any other.
+
+One caveat that is the source's to own rather than telamon's: a cursor is the furthest-forward value seen in the rows returned, and a row committed with an earlier timestamp after that point will be missed until a full read. If your warehouse writes with a clock rather than a sequence, the reconciling cycle is what catches it.
 
 ### Updating a bundle yourself
 

@@ -13,6 +13,7 @@ export {
   createBundleHandler,
   type BundleHandler,
   type BundleHandlerOptions,
+  type RefreshOptions,
 } from './handler.js';
 
 export { searchBundle, type ServerSearch } from './search.js';

@@ -2,7 +2,13 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { watch as watchFs } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { normalizeFilePath } from '../bundle/paths.js';
-import type { BundleSource, SourceDiagnostic, SourceResult } from './types.js';
+import type {
+  BundleSource,
+  SourceChanges,
+  SourceCursor,
+  SourceDiagnostic,
+  SourceResult,
+} from './types.js';
 
 export interface FileSourceOptions {
   /**
@@ -79,6 +85,8 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
   } = options;
 
   const absoluteRoot = resolve(root);
+  /** Paths the last walk found, so the next one can tell what went missing. */
+  let known = new Set<string>();
   const patterns = ignore.map(globToRegExp);
   const ignored = (path: string) => patterns.some((pattern) => pattern.test(path));
   const wanted = (name: string) => extensions.some((ext) => name.toLowerCase().endsWith(ext));
@@ -86,9 +94,27 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
   const toBundlePath = (absolute: string) =>
     normalizeFilePath(relative(absoluteRoot, absolute).split(sep).join('/'));
 
-  async function load(): Promise<SourceResult> {
+  interface WalkResult {
+    files: Record<string, string>;
+    diagnostics: SourceDiagnostic[];
+    /** Every markdown file found, and when it was last written. */
+    seen: Map<string, number>;
+  }
+
+  /**
+   * One pass over the tree.
+   *
+   * `wantContents` decides which files are actually read. A full load wants
+   * all of them; an incremental one wants only those written since it last
+   * looked, and gets the rest of what it needs -- which paths exist -- from
+   * the walk itself.
+   */
+  async function walkTree(
+    wantContents: (path: string, mtimeMs: number) => boolean,
+  ): Promise<WalkResult> {
     const files: Record<string, string> = {};
     const diagnostics: SourceDiagnostic[] = [];
+    const seen = new Map<string, number>();
     /**
      * Directories already walked, keyed by their *resolved* path.
      *
@@ -96,7 +122,7 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
      * produces an endlessly deeper string -- `a/link/a/link/...` -- every level
      * of which looks new, so the walk only stops when the OS refuses the name.
      */
-    const seen = new Set<string>();
+    const walked = new Set<string>();
 
     const identity = async (path: string) => {
       try {
@@ -145,8 +171,8 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
         if (isDirectory) {
           if (ignored(`${path}/`)) continue;
           const key = await identity(absolute);
-          if (seen.has(key)) continue;
-          seen.add(key);
+          if (walked.has(key)) continue;
+          walked.add(key);
           await walk(absolute);
           continue;
         }
@@ -164,7 +190,8 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
             });
             continue;
           }
-          files[path] = await readFile(absolute, 'utf8');
+          seen.set(path, info.mtimeMs);
+          if (wantContents(path, info.mtimeMs)) files[path] = await readFile(absolute, 'utf8');
         } catch (error) {
           diagnostics.push({
             code: 'unreadable-file',
@@ -188,10 +215,22 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
     }
 
     // Seed with the root, so a symlink pointing back at it is caught at once.
-    seen.add(await identity(absoluteRoot));
+    walked.add(await identity(absoluteRoot));
     await walk(absoluteRoot);
+    return { files, diagnostics, seen };
+  }
 
-    if (Object.keys(files).length === 0) {
+  /** The newest modification time in a walk, which is where the next one resumes. */
+  function cursorOf(seen: Map<string, number>): number {
+    let newest = 0;
+    for (const mtimeMs of seen.values()) if (mtimeMs > newest) newest = mtimeMs;
+    return newest;
+  }
+
+  async function load(): Promise<SourceResult> {
+    const { files, diagnostics, seen } = await walkTree(() => true);
+
+    if (seen.size === 0) {
       diagnostics.push({
         code: 'empty-source',
         severity: 'warning',
@@ -199,12 +238,36 @@ export function fileSource(root: string, options: FileSourceOptions = {}): Bundl
       });
     }
 
-    return { files, diagnostics };
+    known = new Set(seen.keys());
+    return { files, diagnostics, cursor: cursorOf(seen) };
   }
 
   return {
     name: root,
     load,
+    /**
+     * Walk again, reading only what was written since last time.
+     *
+     * The walk itself is unavoidable -- it is how a deletion becomes visible --
+     * but it is `stat` calls rather than reads, and reading file contents is
+     * the expensive part.
+     */
+    async loadChanged(since: SourceCursor): Promise<SourceChanges> {
+      const watermark = typeof since === 'number' ? since : Number(since);
+      const { files, diagnostics, seen } = await walkTree(
+        (_path, mtimeMs) => !Number.isFinite(watermark) || mtimeMs > watermark,
+      );
+
+      const deleted = [...known].filter((path) => !seen.has(path));
+      known = new Set(seen.keys());
+
+      return {
+        changed: files,
+        deleted,
+        diagnostics,
+        cursor: Math.max(Number.isFinite(watermark) ? watermark : 0, cursorOf(seen)),
+      };
+    },
     watch(onChange: () => void) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       // One save can fire several events; coalesce so it rebuilds once.

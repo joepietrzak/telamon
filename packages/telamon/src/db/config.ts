@@ -55,6 +55,12 @@ export interface TableMapping {
   constants?: Record<string, unknown>;
   /** Describes the directory this mapping fills, for the generated indexes. */
   directory?: DirectoryInfo;
+  /**
+   * Column holding a value that only ever moves forward when a row changes --
+   * an `updated_at`, a version, a sequence. Declaring it lets the source ask
+   * for what changed rather than re-reading the table.
+   */
+  changedColumn?: string;
   /** Appended to the generated statement as `where <...>`. */
   where?: string;
   /** Appended as `order by <...>`. */
@@ -102,6 +108,20 @@ function asStringMap(value: unknown, where: string): Record<string, string> {
   return record as Record<string, string>;
 }
 
+/**
+ * A column we are willing to interpolate into a statement.
+ *
+ * Unlike the values in `frontmatter`, which are only ever looked up on a row
+ * this has already been handed, `changedColumn` is written into SQL -- so it
+ * has to look like a column and nothing else.
+ */
+function asColumnName(value: unknown, where: string): string {
+  if (typeof value !== 'string' || !/^[A-Za-z_][A-Za-z0-9_$]*$/.test(value)) {
+    fail(`${where} must be a plain column name.`);
+  }
+  return value;
+}
+
 function asStringList(value: unknown, where: string): string[] {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
     fail(`${where} must be an array of column names.`);
@@ -139,6 +159,13 @@ export function parseDbConfig(input: unknown): DbConfig {
       fail(`${where}.table "${table}" is not a plain table name; use \`sql\` instead.`);
     }
 
+    if (mapping.changedColumn !== undefined && sql !== undefined) {
+      fail(
+        `${where} cannot combine \`changedColumn\` with \`sql\`: there is no safe way to add a ` +
+          'predicate to a statement telamon did not build.',
+      );
+    }
+
     const path = optionalString(mapping.path, `${where}.path`);
     if (!path) fail(`${where} needs a \`path\` template.`);
     if (!/\{[^}]+\}/.test(path)) {
@@ -168,6 +195,9 @@ export function parseDbConfig(input: unknown): DbConfig {
       }),
       ...(mapping.directory !== undefined && {
         directory: asRecord(mapping.directory, `${where}.directory`) as DirectoryInfo,
+      }),
+      ...(mapping.changedColumn !== undefined && {
+        changedColumn: asColumnName(mapping.changedColumn, `${where}.changedColumn`),
       }),
       ...(mapping.where !== undefined && { where: optionalString(mapping.where, `${where}.where`)! }),
       ...(mapping.orderBy !== undefined && {
