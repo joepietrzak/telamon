@@ -867,11 +867,24 @@ a.okf-references-toggle {
   background: var(--okf-color-surface, #f7f8fa);
   border: var(--okf-border-width, 1px) solid var(--okf-color-border, #e2e5ea);
   border-radius: var(--okf-radius-md, 6px);
+}
+
+/*
+ * The gestures, once something is actually listening for them.
+ *
+ * These used to sit on `.okf-graph-canvas` unconditionally, which on a served
+ * page offered a grab cursor for a pan that never happened and -- worse --
+ * took `touch-action` away from a reader whose only intent was to scroll past
+ * a 620px-tall graph. The class is set by React on mount and by the
+ * enhancement script otherwise, so the cost is only paid where the gesture
+ * works.
+ */
+.okf-graph-canvas--interactive {
   touch-action: none;
   cursor: grab;
 }
 
-.okf-graph-canvas:active {
+.okf-graph-canvas--interactive:active {
   cursor: grabbing;
 }
 

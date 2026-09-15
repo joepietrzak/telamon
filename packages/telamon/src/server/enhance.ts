@@ -1,3 +1,12 @@
+import {
+  INITIAL_VIEW,
+  VIEWPORT_CLASS,
+  isPan,
+  panned,
+  viewTransform,
+  zoomed,
+  type View,
+} from '../components/graph/viewport.js';
 import { ENHANCE_SCRIPT_ID, type EnhancePayload } from './ids.js';
 
 /**
@@ -340,10 +349,115 @@ function enhanceSearch(config: EnhancePayload): void {
   });
 }
 
+/**
+ * Pan and zoom on a served graph page.
+ *
+ * The layout arrives settled -- the server ran the simulation and the
+ * coordinates are in the markup -- so there is nothing to compute here and no
+ * reason to ship d3 or React to do it. Two gestures move one group.
+ *
+ * Pointer events rather than mouse events, so a finger pans too -- which is
+ * also why the `touch-action: none` that makes that possible is gated on the
+ * class this sets at the end. A reader whose browser never runs this keeps
+ * their scroll and a graph of nodes that are still links.
+ */
+function enhanceGraph(): void {
+  const canvas = document.querySelector<SVGSVGElement>('.okf-graph-canvas');
+  const viewport = canvas?.querySelector<SVGGElement>(`.${VIEWPORT_CLASS}`);
+  if (!canvas || !viewport) return;
+
+  let view: View = INITIAL_VIEW;
+  let drag: {
+    pointerId: number;
+    x: number;
+    y: number;
+    startX: number;
+    startY: number;
+    panning: boolean;
+  } | null = null;
+  /** True once a press has travelled far enough to pan, so the click it ends with is ignored. */
+  let dragged = false;
+
+  const apply = (next: View): void => {
+    if (next === view) return;
+    view = next;
+    viewport.setAttribute('transform', viewTransform(view));
+  };
+
+  canvas.addEventListener('pointerdown', (event) => {
+    // Deliberately no setPointerCapture here. Capturing on press retargets the
+    // click that follows to the canvas, so a node's own href never opens --
+    // capture is taken below, only once a pan really starts.
+    drag = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      panning: false,
+    };
+    dragged = false;
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (!drag.panning) {
+      if (!isPan(event.clientX - drag.startX, event.clientY - drag.startY)) return;
+      drag.panning = true;
+      dragged = true;
+      canvas.setPointerCapture(event.pointerId);
+    }
+
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    // `panned` keeps NaN out of the transform, but the origin has to be
+    // guarded here: recording a coordinate-less event as the new origin makes
+    // every later delta NaN, and the pan is stuck for the rest of the gesture.
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    apply(panned(view, dx, dy));
+  });
+
+  const endDrag = (event: PointerEvent): void => {
+    if (drag?.pointerId !== event.pointerId) return;
+    if (drag.panning && canvas.hasPointerCapture?.(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    drag = null;
+  };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  // The click that ends a pan belongs to the pan, not to whichever node the
+  // pointer happened to stop on. Capture phase: an anchor navigates on its
+  // default action, and this has to be in before that.
+  canvas.addEventListener(
+    'click',
+    (event) => {
+      if (!dragged) return;
+      dragged = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
+
+  // Passive: the page scrolls as it always did, and the graph zooms with it.
+  // Claiming the wheel outright would trap a reader trying to scroll past.
+  canvas.addEventListener('wheel', (event) => apply(zoomed(view, event.deltaY)), {
+    passive: true,
+  });
+
+  canvas.classList.add('okf-graph-canvas--interactive');
+}
+
 /** Upgrade the page in place. Safe to call once the DOM is parsed. */
 export function enhancePage(): void {
   const config = settings();
   enhanceNav();
+  enhanceGraph();
   if (config) {
     enhanceNavTree(config);
     enhanceSearch(config);

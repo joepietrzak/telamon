@@ -328,9 +328,9 @@ What does grow is the sidebar, though not with the bundle: it renders the branch
 
 ### Progressive enhancement, not hydration
 
-Everything on a served page works with JavaScript switched off: search submits a form, the download is a link, the references toggle is a link that puts the state in the URL, and the graph is already drawn.
+Everything on a served page works with JavaScript switched off: search submits a form, the download is a link, the references toggle is a link that puts the state in the URL, and the graph is already drawn, every node a link you can click.
 
-The enhancement script — a few kilobytes of plain DOM code, no React — upgrades that in place: the narrow-screen navigation button starts working, `/` and ⌘K focus the search box, and results appear as you type instead of on submit. It carries no bundle; the only thing it ever fetches is the result of a search someone actually typed. `enhance: false` omits it entirely, and the site still works.
+The enhancement script — a few kilobytes of plain DOM code, no React — upgrades that in place: the narrow-screen navigation button starts working, `/` and ⌘K focus the search box, results appear as you type instead of on submit, and the graph gains drag-to-pan and scroll-to-zoom. The graph needs no layout work to do it: the server ran the simulation and the coordinates are already in the markup, so panning moves a group that is already there rather than shipping d3 to compute one. It carries no bundle; the only thing it ever fetches is the result of a search someone actually typed. `enhance: false` omits it entirely, and the site still works.
 
 ```tsx
 // Only if you want your own: the default entry is served for you.

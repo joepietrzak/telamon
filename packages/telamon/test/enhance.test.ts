@@ -220,3 +220,89 @@ describe('enhancePage', () => {
     expect(() => enhancePage()).not.toThrow();
   });
 });
+
+describe('the served graph', () => {
+  const canvasOf = () => document.querySelector<SVGSVGElement>('.okf-graph-canvas')!;
+  const viewportOf = () =>
+    document.querySelector<SVGGElement>('.okf-graph-viewport')!.getAttribute('transform') ?? '';
+
+  /**
+   * jsdom implements no `PointerEvent`, and `fireEvent.pointerMove(el, { clientX })`
+   * drops the coordinates. Dispatching a `MouseEvent` under the pointer event's
+   * type is what actually delivers them.
+   */
+  function pointer(target: Element, type: string, x: number, y: number): void {
+    target.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }));
+  }
+
+  function drag(target: Element, distance: number): void {
+    pointer(target, 'pointerdown', 100, 100);
+    pointer(target, 'pointermove', 100 + distance, 100);
+    pointer(target, 'pointerup', 100 + distance, 100);
+  }
+
+  it('arrives laid out, static, and costing a touch reader nothing', async () => {
+    await load('/graph');
+    const canvas = canvasOf();
+
+    // The server ran the simulation: the coordinates are already in the markup.
+    expect(viewportOf()).toBe('translate(0 0) scale(1)');
+    expect(document.querySelectorAll('.okf-graph-node').length).toBeGreaterThan(0);
+
+    // Inert, and honest about it -- no grab cursor, and `touch-action` still
+    // belongs to the reader scrolling past.
+    expect(canvas.classList.contains('okf-graph-canvas--interactive')).toBe(false);
+    drag(canvas, 60);
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    expect(viewportOf()).toBe('translate(0 0) scale(1)');
+  });
+
+  it('pans and zooms once enhanced', async () => {
+    await load('/graph');
+    enhancePage();
+    const canvas = canvasOf();
+
+    expect(canvas.classList.contains('okf-graph-canvas--interactive')).toBe(true);
+
+    pointer(canvas, 'pointerdown', 100, 100);
+    pointer(canvas, 'pointermove', 160, 130);
+    expect(viewportOf()).toContain('translate(60 30)');
+    pointer(canvas, 'pointerup', 160, 130);
+
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    expect(Number(/scale\(([-\d.e]+)\)/.exec(viewportOf())?.[1])).toBeGreaterThan(1);
+  });
+
+  it('does not open a node on the click that ends a pan', async () => {
+    await load('/graph');
+    enhancePage();
+    const canvas = canvasOf();
+    const node = document.querySelector<SVGAElement>('.okf-graph-node')!;
+
+    drag(canvas, 60);
+    const swallowed = new MouseEvent('click', { bubbles: true, cancelable: true });
+    node.dispatchEvent(swallowed);
+    // The anchor would otherwise navigate: a pan that ends over a node is not
+    // a request to open it.
+    expect(swallowed.defaultPrevented).toBe(true);
+
+    // The next click is a click again.
+    const real = new MouseEvent('click', { bubbles: true, cancelable: true });
+    node.dispatchEvent(real);
+    expect(real.defaultPrevented).toBe(false);
+  });
+
+  it('keeps a coordinate-less event out of the transform', async () => {
+    await load('/graph');
+    enhancePage();
+    const canvas = canvasOf();
+
+    pointer(canvas, 'pointerdown', 100, 100);
+    pointer(canvas, 'pointermove', 160, 130);
+    canvas.dispatchEvent(new Event('pointermove', { bubbles: true }));
+    pointer(canvas, 'pointermove', 170, 130);
+
+    expect(viewportOf()).toContain('translate(70 30)');
+    expect(viewportOf()).not.toContain('NaN');
+  });
+});

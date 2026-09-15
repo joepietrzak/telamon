@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   forceCenter,
   forceCollide,
@@ -11,6 +11,15 @@ import {
 import type { Bundle } from '../../bundle/types.js';
 import { Link, useNavigate, useRoute, useRouter } from '../../router/context.js';
 import { useClassName, useOkfBundle, useOkfConfig } from '../context.js';
+import {
+  INITIAL_VIEW,
+  VIEWPORT_CLASS,
+  isPan,
+  panned,
+  viewTransform,
+  zoomed,
+  type View,
+} from './viewport.js';
 
 interface SimNode extends SimulationNodeDatum {
   route: string;
@@ -33,23 +42,13 @@ const HEIGHT = 620;
 /** Ticks run to completion up front: a settled static layout beats an animated one here. */
 const TICKS = 320;
 const PALETTE_SIZE = 8;
-/** Pointer travel, in px, before a press counts as a pan rather than a click. */
-const DRAG_THRESHOLD = 4;
-const ZOOM_STEP = 1.12;
 /** Perpendicular offset between edges joining the same pair of nodes. */
 const PARALLEL_SPREAD = 26;
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 4;
-
 /** Stable index into the palette so a given concept type keeps its colour across renders. */
 function paletteIndex(type: string): number {
   let hash = 0;
   for (let i = 0; i < type.length; i += 1) hash = (hash * 31 + type.charCodeAt(i)) | 0;
   return Math.abs(hash) % PALETTE_SIZE;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function radiusOf(node: SimNode): number {
@@ -214,7 +213,14 @@ export default function GraphView() {
 
   const markerPrefix = useId().replace(/:/g, '');
   const { nodes, links } = useMemo(() => settledLayout(bundle.graph), [bundle.graph]);
-  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const [view, setView] = useState<View>(INITIAL_VIEW);
+  // Whether the gestures below are actually wired up. False through the server
+  // render, and false forever on a served page that React never takes over --
+  // there the enhancement script sets the class instead. Deliberately an
+  // effect rather than a `typeof window` check, which is true during
+  // `renderToString` under jsdom and mismatches on hydration.
+  const [interactive, setInteractive] = useState(false);
+  useEffect(() => setInteractive(true), []);
   const [hovered, setHovered] = useState<string | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -245,7 +251,7 @@ export default function GraphView() {
       </header>
 
       <svg
-        className="okf-graph-canvas"
+        className={`okf-graph-canvas${interactive ? ' okf-graph-canvas--interactive' : ''}`}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         // Not role="img": that would collapse the graph into a single opaque
         // image and hide the focusable nodes inside it.
@@ -270,11 +276,7 @@ export default function GraphView() {
           if (!drag || drag.pointerId !== event.pointerId) return;
 
           if (!drag.panning) {
-            const travelled = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
-            // Written so a NaN travelled (an event with no coordinates) falls
-            // through to `return`: ambiguous input must not become a pan, or
-            // the click it swallows never reaches the node.
-            if (!(travelled > DRAG_THRESHOLD)) return;
+            if (!isPan(event.clientX - drag.startX, event.clientY - drag.startY)) return;
             drag.panning = true;
             draggedRef.current = true;
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -282,12 +284,13 @@ export default function GraphView() {
 
           const dx = event.clientX - drag.x;
           const dy = event.clientY - drag.y;
-          // One coordinate-less event mid-pan would put NaN into the transform,
-          // and nothing later would ever bring it back.
+          // `panned` guards the transform; this guards the origin. Recording a
+          // coordinate-less event as the new origin makes every later delta
+          // NaN, and the pan is stuck for the rest of the gesture.
           if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
           drag.x = event.clientX;
           drag.y = event.clientY;
-          setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
+          setView((current) => panned(current, dx, dy));
         }}
         onPointerUp={(event) => {
           const drag = dragRef.current;
@@ -301,15 +304,7 @@ export default function GraphView() {
           dragRef.current = null;
         }}
         onWheel={(event) => {
-          // No usable delta is not a zoom. This rejects NaN and a missing
-          // deltaY as well as 0, which a horizontal-only scroll reports --
-          // the old `deltaY < 0` test quietly read all three as "zoom out".
-          if (!Number.isFinite(event.deltaY) || event.deltaY === 0) return;
-          const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-          setView((current) => {
-            const scale = clamp(current.scale * factor, MIN_SCALE, MAX_SCALE);
-            return Number.isFinite(scale) ? { ...current, scale } : current;
-          });
+          setView((current) => zoomed(current, event.deltaY));
         }}
       >
         <defs>
@@ -329,7 +324,7 @@ export default function GraphView() {
           ))}
         </defs>
 
-        <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+        <g className={VIEWPORT_CLASS} transform={viewTransform(view)}>
           {links.map((link, index) => {
             const source = link.source as SimNode;
             const target = link.target as SimNode;
