@@ -63,14 +63,22 @@ export async function loadBundle(
   const parsed = parseDbConfig(config);
 
   // In parallel: a loader on a request path pays the slowest table, not the sum.
+  let cursor: SourceCursor = '';
+  const tracks = tracksChanges(parsed);
   const results = await Promise.all(
     parsed.tables.map(async (mapping) => {
       const statement = buildStatement(mapping);
-      return toRows(await query(statement, []), statement);
+      const rows = toRows(await query(statement, []), statement);
+      // The high-water mark of what this read actually saw. Without it the
+      // next incremental read starts from `''`, every row compares greater,
+      // and "ask for what changed" asks for the whole table -- a full scan on
+      // a schedule, and on a warehouse that bills by bytes read, a billed one.
+      if (tracks) cursor = advance(cursor, rows, mapping.changedColumn!);
+      return rows;
     }),
   );
 
-  return rowsToFiles(parsed, results);
+  return { ...rowsToFiles(parsed, results), ...(tracks && { cursor }) };
 }
 
 /**

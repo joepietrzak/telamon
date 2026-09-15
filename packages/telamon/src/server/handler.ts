@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { archiveFileName, zipFiles } from '../bundle/archive.js';
 import { parseBundle } from '../bundle/parse.js';
-import { diffFiles, updateBundle } from '../bundle/update.js';
+import { diffFiles, filesToReparse, updateBundle } from '../bundle/update.js';
 import { hrefToRoute } from '../bundle/paths.js';
 import type { Bundle, BundleDiagnostic, OkfDoc } from '../bundle/types.js';
 import { Layout } from '../components/Layout.js';
@@ -384,8 +384,13 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
 
     if (incremental) {
       const { changed, deleted, diagnostics, cursor } = await source.loadChanged!(current.cursor!);
-      const moved = Object.keys(changed).length + deleted.length;
-      if (moved === 0) {
+      // What the source offered is not what changed. A query for rows past a
+      // watermark hands back whole rows, and a row can move without its
+      // document differing by a byte -- so the work, and the number reported
+      // for it, come from comparing contents rather than counting rows.
+      const differing = Object.keys(changed).filter((path) => current.files[path] !== changed[path]);
+
+      if (differing.length === 0 && deleted.length === 0) {
         // Still record where the source got to, so the next ask is narrower.
         cached = Promise.resolve({ ...current, cursor });
         return 0;
@@ -398,14 +403,17 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
       const bundle = updateBundle(current.bundle, { changed, deleted });
       onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
       cached = Promise.resolve({ bundle, files, cursor });
-      return moved;
+      return filesToReparse(current.files, changed).size + deleted.length;
     }
 
     const { files, diagnostics, cursor } = await source.load();
     const changes = diffFiles(current.files, files);
-    const reparsed = Object.keys(changes.changed ?? {}).length + (changes.deleted?.length ?? 0);
+    // `diffFiles` already reports only what differs, so anything here is real
+    // work -- but an asset that is not markdown is not a parse, and the number
+    // this returns is a count of parses.
+    const moved = Object.keys(changes.changed ?? {}).length + (changes.deleted?.length ?? 0);
 
-    if (reparsed === 0) {
+    if (moved === 0) {
       cached = Promise.resolve({ ...current, ...(cursor !== undefined && { cursor }) });
       return 0;
     }
@@ -413,7 +421,7 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
     const bundle = updateBundle(current.bundle, changes);
     onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
     cached = Promise.resolve({ bundle, files, ...(cursor !== undefined && { cursor }) });
-    return reparsed;
+    return filesToReparse(current.files, changes.changed ?? {}).size + (changes.deleted?.length ?? 0);
   };
   handler.invalidate = () => {
     cached = undefined;

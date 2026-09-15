@@ -509,15 +509,147 @@ describe('databaseSource', () => {
     expect(databaseSource(config, async () => []).loadChanged).toBeUndefined();
   });
 
-  it('starts the cursor before every row, so the first ask misses nothing', async () => {
+  /**
+   * The first read is what makes the second one cheap. Seeding the cursor with
+   * `''` instead means every row compares greater, so "ask for what changed"
+   * asks for the whole table on every process start -- measured on a
+   * 2000-document corpus, a full re-read of all of it ten seconds after boot.
+   */
+  it('leaves the cursor at the furthest-forward value the read actually saw', async () => {
+    const rows: Row[] = [
+      { metric_name: 'a', display_name: 'A', definition_md: 'x', updated_at: '2026-01-02T00:00:00Z' },
+      { metric_name: 'b', display_name: 'B', definition_md: 'x', updated_at: '2026-03-04T00:00:00Z' },
+      { metric_name: 'c', display_name: 'C', definition_md: 'x', updated_at: '2026-02-03T00:00:00Z' },
+    ];
+    const source = databaseSource(tracked, async () => rows);
+    const { cursor } = await source.load();
+    expect(cursor).toBe('2026-03-04T00:00:00Z');
+  });
+
+  it('falls back to before every row when the read saw none', async () => {
+    // Nothing to take a watermark from, and `''` sorts before every timestamp,
+    // so the next ask is for everything rather than for nothing.
     const source = databaseSource(tracked, async () => []);
     const { cursor } = await source.load();
     expect(cursor).toBe('');
+  });
+
+  it('does not offer a cursor at all when no mapping tracks changes', async () => {
+    const source = databaseSource(config, async () => []);
+    expect(await source.load()).not.toHaveProperty('cursor');
   });
 
   it('reports no deletions, because a query for changes cannot see them', async () => {
     const source = databaseSource(tracked, async () => []);
     const changes = await source.loadChanged!('');
     expect(changes.deleted).toEqual([]);
+  });
+});
+
+describe('paths out of data', () => {
+  const rowsToPaths = (rows: Row[], mapping: Partial<DbConfig['tables'][number]> = {}) =>
+    Object.keys(
+      rowsToFiles(
+        {
+          okfVersion: '0.2',
+          generateIndexes: false,
+          tables: [{ table: 't', path: '{name}.md', title: 'name', body: 'body', ...mapping }],
+        },
+        [rows],
+      ).files,
+    );
+
+  /**
+   * A rule of `[a-z0-9_]` reads as safe and is not: it empties every title
+   * written in a script that is not Latin, and an emptied path segment is a
+   * skipped row. Measured on 2000 Wikipedia articles across eight languages,
+   * that rule dropped 1019 of them -- a mapping that works in English and
+   * silently discards a non-English corpus.
+   */
+  it('keeps letters in whatever script they are written in', () => {
+    expect(
+      rowsToPaths([
+        { name: '科学', body: 'x' },
+        { name: 'Наука', body: 'x' },
+        { name: 'المسيحية', body: 'x' },
+        { name: 'विज्ञान', body: 'x' },
+        { name: '한글', body: 'x' },
+      ]),
+    ).toEqual(['科学.md', 'наука.md', 'المسيحية.md', 'विज्ञान.md', '한글.md']);
+  });
+
+  it('still flattens Latin diacritics and keeps snake_case', () => {
+    // Unchanged from before: a Latin title should not acquire a
+    // percent-encoded route it never had, and database names are snake_case.
+    expect(
+      rowsToPaths([
+        { name: 'Café Müller', body: 'x' },
+        { name: 'Gödel, Escher, Bach', body: 'x' },
+        { name: 'order_items', body: 'x' },
+      ]),
+    ).toEqual(['cafe-muller.md', 'godel-escher-bach.md', 'order_items.md']);
+  });
+
+  it('still skips a row whose path segment is only punctuation', () => {
+    const { diagnostics } = rowsToFiles(
+      {
+        okfVersion: '0.2',
+        generateIndexes: false,
+        tables: [{ table: 't', path: '{name}.md', title: 'name', body: 'body' }],
+      },
+      [[{ name: '---', body: 'x' }]],
+    );
+    expect(diagnostics.map((d) => d.code)).toContain('empty-path-segment');
+  });
+
+  /**
+   * `path` is slugified and frontmatter is not, so a target lifted from a
+   * foreign key names a file that was never written under that name. Every
+   * relationship in a database-backed bundle then resolves to nothing, and the
+   * only workaround is reimplementing the slug rule in SQL.
+   */
+  it('points relationship targets at the files it actually writes', () => {
+    const { files } = rowsToFiles(
+      {
+        okfVersion: '0.2',
+        generateIndexes: false,
+        tables: [
+          {
+            table: 't',
+            path: 'docs/{name}.md',
+            title: 'name',
+            body: 'body',
+            frontmatter: { relationships: 'rel' },
+          },
+        ],
+      },
+      [
+        [
+          {
+            name: 'a',
+            body: 'x',
+            rel: [
+              { type: 'links-to', target: 'Gross Revenue.md' },
+              { type: 'links-to', target: 'エネルギー 保存.md' },
+              { type: 'up', target: '../Warehouse Tables/Order Items.md' },
+              { type: 'same', target: 'already-slugged.md' },
+              { type: 'route', target: '../Warehouse Tables' },
+              { type: 'cites', target: 'https://example.com/Gross Revenue.md' },
+              { type: 'anchored', target: 'Gross Revenue.md#notes' },
+            ],
+          },
+        ],
+      ],
+    );
+    const targets = [...files['docs/a.md']!.matchAll(/target: (.+)/g)].map((m) => m[1]!.trim());
+    expect(targets).toEqual([
+      'gross-revenue.md',
+      'エネルギー-保存.md',
+      '../warehouse-tables/order-items.md',
+      'already-slugged.md',
+      '../warehouse-tables',
+      'https://example.com/Gross Revenue.md',
+      'gross-revenue.md#notes',
+    ]);
   });
 });

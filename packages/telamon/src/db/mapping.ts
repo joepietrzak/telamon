@@ -25,6 +25,11 @@ export interface MappedBundle {
   /** Ready for `parseBundle` or `OkfSite`. */
   files: Record<string, string>;
   diagnostics: DbDiagnostic[];
+  /**
+   * The furthest-forward `changedColumn` value this read saw, when every
+   * mapping declares one. It is where an incremental read should resume.
+   */
+  cursor?: string | number;
 }
 
 const PLACEHOLDER = /\{([^}]+)\}/g;
@@ -34,14 +39,73 @@ const PLACEHOLDER = /\{([^}]+)\}/g;
  *
  * Database names are snake_case and OKF filenames commonly are too, so
  * `order_items` should stay `order_items` rather than becoming `order-items`.
+ *
+ * Letters are kept in whatever script they are written in. Reducing the set to
+ * `[a-z0-9]` looks safe until the titles are Japanese or Arabic, at which point
+ * every row in the table slugs to the empty string and is skipped: a mapping
+ * that works perfectly in English and drops an entire non-English corpus on the
+ * floor. Routes are URL-decoded by definition here and encoded only on the way
+ * into an href, and the filesystem source has always produced paths like these,
+ * so there is nothing further downstream that needs them flattened.
+ *
+ * Combining marks survive with the letters they belong to -- strip them and
+ * Devanagari or Arabic is not merely transliterated but misspelt. The
+ * Latin-only diacritic strip stays, so `Café Müller` still slugs to
+ * `cafe-muller` rather than acquiring a percent-encoded route it never had.
  */
 function slug(value: unknown): string {
-  return String(value ?? '')
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '-')
-    .replace(/^[-_]+|[-_]+$/g, '');
+  return (
+    String(value ?? '')
+      .normalize('NFKD')
+      // The Latin-1/Greek/Cyrillic combining block only. Devanagari and Arabic
+      // vowel signs live elsewhere and are part of the word.
+      .replace(/[\u0300-\u036f]/g, '')
+      // NFKD split what it could; NFC puts back together anything whose marks
+      // were not stripped, so Hangul does not come out as loose jamo.
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{M}\p{N}_]+/gu, '-')
+      .replace(/^[-_]+|[-_]+$/g, '')
+  );
+}
+
+const TARGET_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/**
+ * A relationship target pointed at the file this mapping actually writes.
+ *
+ * `path` goes through `slug` and frontmatter does not, so a target carried in
+ * a foreign key -- `Aaron Swartz`, `order items` -- names a document that was
+ * never written under that name. Relationships resolve by exact file match, so
+ * the whole set comes back as `broken-relationship` on a bundle that is
+ * perfectly intact; the only way out was to reimplement `slug` in SQL.
+ *
+ * Applying the same rule here closes that. It is idempotent, so data that
+ * already holds the written path is left as it is, and it leaves external
+ * targets, anchors, `.`, `..` and the extension alone.
+ */
+function slugifyTarget(target: string): string {
+  const trimmed = target.trim();
+  if (trimmed === '' || trimmed.startsWith('#')) return target;
+  if (trimmed.startsWith('//') || TARGET_SCHEME.test(trimmed)) return target;
+
+  const hash = trimmed.indexOf('#');
+  const fragment = hash === -1 ? '' : trimmed.slice(hash);
+  const path = hash === -1 ? trimmed : trimmed.slice(0, hash);
+
+  const segments = path.split('/');
+  return (
+    segments
+      .map((segment, index) => {
+        if (segment === '' || segment === '.' || segment === '..') return segment;
+        if (index < segments.length - 1) return slug(segment);
+        // A target with no `.md` is read as a route, which is a shape worth
+        // keeping: it lets a relationship point at a directory index.
+        const ext = /\.md$/i.exec(segment);
+        return ext ? `${slug(segment.slice(0, ext.index))}.md` : slug(segment);
+      })
+      .join('/') + fragment
+  );
 }
 
 /** Frontmatter is authored YAML, so values have to land as YAML scalars. */
@@ -230,6 +294,15 @@ export function rowsToFiles(config: DbConfig, results: Row[][]): MappedBundle {
       for (const [key, value] of Object.entries(mapping.constants ?? {})) {
         const normalized = frontmatterValue(value);
         if (normalized !== undefined) frontmatter[key] = normalized;
+      }
+
+      if (Array.isArray(frontmatter.relationships)) {
+        frontmatter.relationships = frontmatter.relationships.map((entry) =>
+          typeof entry === 'object' && entry !== null && !Array.isArray(entry) &&
+          typeof (entry as { target?: unknown }).target === 'string'
+            ? { ...entry, target: slugifyTarget((entry as { target: string }).target) }
+            : entry,
+        );
       }
 
       files[filePath] = serialize(frontmatter, body);

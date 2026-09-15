@@ -38,10 +38,14 @@ export function databaseSource(
   const source: BundleSource = {
     name,
     load: async () => {
-      const { files, diagnostics } = await loadBundle(parsed, query);
+      const { files, diagnostics, cursor } = await loadBundle(parsed, query);
       // A first read starts the clock, so the next one can ask for what
       // changed rather than everything.
-      return { files, diagnostics, ...(tracksChanges(parsed) && { cursor: startingCursor() }) };
+      return {
+        files,
+        diagnostics,
+        ...(tracksChanges(parsed) && { cursor: cursor ?? startingCursor() }),
+      };
     },
   };
 
@@ -64,12 +68,20 @@ export function databaseSource(
 }
 
 /**
- * Where a first read leaves the cursor.
+ * Where a first read leaves the cursor when the rows could not say.
  *
  * The empty string sorts before every timestamp and every sequence rendered as
- * text, so the first incremental read asks for everything and settles onto
- * real values from the rows it gets back. Starting at "now" would instead
- * skip anything written while the first read was in flight.
+ * text, so the read that follows asks for everything. That is the right answer
+ * only when there is nothing better: a full read now reports the
+ * furthest-forward `changedColumn` it actually saw, and that is what the source
+ * hands back instead. Falling back to `''` costs a scan; falling back to "now"
+ * would silently skip whatever was written while the first read was in flight.
+ *
+ * A watermark taken from rows is not a perfect fence either. A transaction can
+ * commit after the read with a `changedColumn` stamped before it -- clock skew,
+ * or a value assigned at statement start -- and an incremental read will never
+ * go back for it. That is what `refresh({ full: true })` on a slower cycle is
+ * for, and why the handler documents it as the thing to run underneath.
  */
 function startingCursor(): SourceCursor {
   return '';

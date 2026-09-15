@@ -58,6 +58,34 @@ describe('routing', () => {
   it('routes log.md alongside its directory', () => {
     expect(bundle.byRoute.get('/log')?.kind).toBe('log');
   });
+
+  /**
+   * A bundle is keyed by the characters in its filenames; a markdown renderer
+   * percent-encodes every href it emits. Without a decode in between, a link to
+   * any filename outside ASCII resolves to a file nobody has -- which is a
+   * broken link on an entirely intact bundle.
+   */
+  it('resolves links to filenames outside ASCII', () => {
+    for (const name of ['café', 'エネルギー', 'المسيحية', 'विज्ञान', 'Наука']) {
+      const local = parseBundle({
+        'a.md': `---\ntype: Article\ntitle: A\n---\n\n[x](${name}.md)\n`,
+        [`${name}.md`]: `---\ntype: Article\ntitle: T\n---\n\nBody.\n`,
+      });
+      const link = local.byPath.get('a.md')?.links[0];
+      expect(link, name).toMatchObject({ route: `/${name}`, broken: false });
+      expect(local.backlinks.get(`/${name}`), name).toHaveLength(1);
+      expect(local.diagnostics.filter((d) => d.code === 'broken-link'), name).toHaveLength(0);
+    }
+  });
+
+  it('leaves a href it cannot decode as it found it', () => {
+    // A stray `%` is a filename, not an encoding error worth failing a link over.
+    const local = parseBundle({
+      'a.md': '---\ntype: Article\ntitle: A\n---\n\n[x](100%-done.md)\n',
+      '100%-done.md': '---\ntype: Article\ntitle: T\n---\n\nBody.\n',
+    });
+    expect(local.byPath.get('a.md')?.links[0]).toMatchObject({ broken: false });
+  });
 });
 
 describe('lifecycle and trust', () => {

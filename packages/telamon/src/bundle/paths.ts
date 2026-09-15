@@ -120,7 +120,23 @@ export function hrefToRoute(pathname: string, basename?: string): string | null 
     else if (rest.startsWith(`${prefix}/`)) rest = rest.slice(prefix.length);
     else return null;
   }
-  const decoded = rest
+  return normalizeRoute(decodeSegments(rest));
+}
+
+/**
+ * Percent-decode each segment of a path, leaving alone any that is not valid
+ * encoding.
+ *
+ * Browsers percent-encode a pathname and so do markdown renderers, while a
+ * bundle is keyed by the characters themselves: `café.md` arrives as
+ * `caf%C3%A9.md`. Decoding is what lets a path outside ASCII match the file it
+ * names. Per segment rather than whole, so an encoded separator stays inside
+ * the segment that carried it, and a stray `%` costs one segment rather than
+ * the link.
+ */
+export function decodeSegments(path: string): string {
+  if (!path.includes('%')) return path;
+  return path
     .split('/')
     .map((segment) => {
       try {
@@ -130,7 +146,6 @@ export function hrefToRoute(pathname: string, basename?: string): string | null 
       }
     })
     .join('/');
-  return normalizeRoute(decoded);
 }
 
 export type HrefKind = 'external' | 'anchor' | 'document' | 'asset';
@@ -169,10 +184,14 @@ export function classifyHref(href: string, fromDir: string): ResolvedHref {
   const search = queryIndex === -1 ? undefined : withoutHash.slice(queryIndex + 1);
   const withoutQuery = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
 
+  // Decoded before resolution so `..` and the separators are read as written,
+  // and so the segments that remain are the characters the bundle is keyed by.
+  const target = decodeSegments(withoutQuery);
+
   // A leading slash means bundle-relative, not filesystem- or origin-relative.
-  const path = withoutQuery.startsWith('/')
-    ? normalizeFilePath(withoutQuery)
-    : resolvePosix(fromDir, withoutQuery);
+  const path = target.startsWith('/')
+    ? normalizeFilePath(target)
+    : resolvePosix(fromDir, target);
 
   if (isMarkdownPath(path)) {
     return { kind: 'document', path, route: filePathToRoute(path), fragment, search };

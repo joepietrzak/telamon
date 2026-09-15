@@ -59,6 +59,27 @@ function sameGraph(a: { nodes: GraphNode[]; edges: GraphEdge[] }, b: typeof a): 
 }
 
 /**
+ * The files a change set actually costs a parse.
+ *
+ * A file reported as changed whose contents are identical needs no work, so a
+ * source that cannot tell what changed can hand over everything and still pay
+ * only for what differs. Shared with the caller that reports how much a
+ * refresh cost: counting what the source offered rather than what was parsed
+ * turns "reparsed 2000 files in 1.5s" into a line in a log, when 2000 files
+ * take half a minute to parse and none of them were touched.
+ */
+export function filesToReparse(
+  previousFiles: Record<string, string>,
+  changed: Record<string, string>,
+): Set<string> {
+  return new Set(
+    Object.keys(changed).filter(
+      (path) => isMarkdownPath(path) && previousFiles[path] !== changed[path],
+    ),
+  );
+}
+
+/**
  * Re-read part of a bundle.
  *
  * Parsing markdown is what makes reading a bundle expensive, and it is
@@ -93,14 +114,7 @@ export function updateBundle(
   for (const path of deleted) delete files[path];
   Object.assign(files, changed);
 
-  // A file reported as changed whose contents are identical needs no work. A
-  // source that cannot tell what changed can hand over everything and still
-  // pay only for what actually differs.
-  const reparse = new Set(
-    Object.keys(changed).filter(
-      (path) => isMarkdownPath(path) && previous.files[path] !== changed[path],
-    ),
-  );
+  const reparse = filesToReparse(previous.files, changed);
 
   const markdownPaths = new Set(Object.keys(files).filter(isMarkdownPath));
   const hasFile = (path: string) => markdownPaths.has(path);

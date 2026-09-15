@@ -690,6 +690,39 @@ describe('refreshing from a source that knows what changed', () => {
     );
   });
 
+  /**
+   * A watermark query hands back whole rows, and a row can move without its
+   * document differing by a byte -- a re-sync that rewrites `updated_at`, or a
+   * first read seeded with a cursor that matched everything. Counting rows
+   * would report two thousand files re-parsed in a second and a half, when two
+   * thousand files take half a minute to parse and none of them were touched.
+   */
+  it('counts the files it parsed, not the rows the source offered', async () => {
+    const source = trackingSource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    // Every file, byte-identical: the source cannot tell, but nothing changed.
+    source.pending = { changed: { ...demo }, deleted: [] };
+    expect(await handler.refresh()).toBe(0);
+
+    // One of them actually differs, alongside a pile that does not.
+    source.pending = {
+      changed: {
+        ...demo,
+        'metrics/gross_revenue.md': demo['metrics/gross_revenue.md']!.replace(
+          'title: Gross revenue',
+          'title: Gross revenue (restated)',
+        ),
+      },
+      deleted: [],
+    };
+    expect(await handler.refresh()).toBe(1);
+    expect(await (await handler(get('/metrics/gross_revenue'))).text()).toContain(
+      'Gross revenue (restated)',
+    );
+  });
+
   it('applies a deletion the source does report', async () => {
     const source = trackingSource();
     const handler = createBundleHandler({ source });
