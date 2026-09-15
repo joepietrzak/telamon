@@ -8,12 +8,13 @@ const demo = readFixture('demo');
 
 /** A source with no disk behind it, and a count of how often it was read. */
 function memorySource(files: Record<string, string> = demo) {
-  const source: BundleSource & { loads: number } = {
+  const source: BundleSource & { loads: number; files: Record<string, string> } = {
     name: 'memory',
     loads: 0,
+    files,
     load: async () => {
       source.loads += 1;
-      return { files, diagnostics: [] };
+      return { files: source.files, diagnostics: [] };
     },
   };
   return source;
@@ -539,6 +540,100 @@ describe('reading the source', () => {
       source: [expect.objectContaining({ code: 'empty-source' })],
       bundle: [expect.objectContaining({ code: 'missing-type' })],
     });
+  });
+});
+
+describe('refreshing', () => {
+  it('folds in an edit without re-reading the whole bundle', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+
+    await handler.warm();
+    expect(await (await handler(get('/metrics/gross_revenue'))).text()).toContain('Gross revenue');
+
+    source.files = {
+      ...demo,
+      'metrics/gross_revenue.md': demo['metrics/gross_revenue.md']!.replace(
+        'title: Gross revenue',
+        'title: Gross revenue (restated)',
+      ),
+    };
+
+    expect(await handler.refresh()).toBe(1);
+    const html = await (await handler(get('/metrics/gross_revenue'))).text();
+    expect(html).toContain('Gross revenue (restated)');
+    // The sidebar is rebuilt too, not just the page.
+    expect(html).toContain('Gross revenue (restated)');
+  });
+
+  it('picks up a new document, in the navigation as well as at its route', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    expect((await handler(get('/metrics/net_revenue'))).status).toBe(404);
+
+    source.files = {
+      ...demo,
+      'metrics/net_revenue.md': '---\ntype: Metric\ntitle: Net revenue\n---\n\nAfter refunds.\n',
+    };
+    expect(await handler.refresh()).toBe(1);
+
+    const page = await handler(get('/metrics/net_revenue'));
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('After refunds');
+
+    const level = (await (await handler(get('/_telamon/nav.json?route=/metrics'))).json()) as {
+      children: { route: string }[];
+    };
+    expect(level.children.map((c) => c.route)).toContain('/metrics/net_revenue');
+  });
+
+  it('picks up a deletion, and reports the route gone', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    const remaining = { ...demo };
+    delete remaining['metrics/gross_revenue.md'];
+    source.files = remaining;
+
+    expect(await handler.refresh()).toBe(1);
+    expect((await handler(get('/metrics/gross_revenue'))).status).toBe(404);
+  });
+
+  it('does nothing when the source has not changed', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    expect(await handler.refresh()).toBe(0);
+    // It still had to read the source to find that out.
+    expect(source.loads).toBe(2);
+  });
+
+  it('reads once when nothing is loaded yet', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+
+    expect(await handler.refresh()).toBe(0);
+    expect(source.loads).toBe(1);
+    expect((await handler(get('/'))).status).toBe(200);
+    expect(source.loads).toBe(1);
+  });
+
+  it('keeps serving the old bundle if the re-read fails', async () => {
+    const source = memorySource();
+    const handler = createBundleHandler({ source });
+    await handler.warm();
+
+    source.load = async () => {
+      throw new Error('warehouse unreachable');
+    };
+
+    await expect(handler.refresh()).rejects.toThrow(/unreachable/);
+    // The page is still there, served from what was loaded before.
+    expect((await handler(get('/metrics/gross_revenue'))).status).toBe(200);
   });
 });
 

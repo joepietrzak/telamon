@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { archiveFileName, zipFiles } from '../bundle/archive.js';
 import { parseBundle } from '../bundle/parse.js';
+import { diffFiles, updateBundle } from '../bundle/update.js';
 import { hrefToRoute } from '../bundle/paths.js';
 import type { Bundle, BundleDiagnostic, OkfDoc } from '../bundle/types.js';
 import { Layout } from '../components/Layout.js';
@@ -76,7 +77,21 @@ export interface BundleHandler {
    * source is a startup failure, which is what it is.
    */
   warm(): Promise<void>;
-  /** Drop the cached bundle; the next request re-reads the source. */
+  /**
+   * Re-read the source and fold in what changed.
+   *
+   * Cheaper than `invalidate()` by the ratio of unchanged documents to changed
+   * ones, because markdown parsing is the expensive part of reading a bundle
+   * and it is skipped for every file whose contents are the same. On a bundle
+   * of two thousand documents, a handful of edits costs milliseconds where a
+   * full re-read costs seconds -- which is what makes refreshing often enough
+   * to feel live affordable at all.
+   *
+   * Resolves once the new bundle is in place. Returns the number of files that
+   * were re-parsed, for logging.
+   */
+  refresh(): Promise<number>;
+  /** Drop the cached bundle, so the next request re-reads and re-parses it all. */
   invalidate(): void;
   /** Stop watching the source. */
   close(): void;
@@ -337,6 +352,25 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
 
   handler.warm = async () => {
     await loaded();
+  };
+  handler.refresh = async () => {
+    // Nothing loaded yet: a first read is the cheapest possible refresh.
+    if (cached === undefined) {
+      await loaded();
+      return 0;
+    }
+
+    const current = await cached;
+    const { files, diagnostics } = await source.load();
+    const changes = diffFiles(current.files, files);
+    const reparsed = Object.keys(changes.changed ?? {}).length + (changes.deleted?.length ?? 0);
+
+    if (reparsed === 0) return 0;
+
+    const bundle = updateBundle(current.bundle, changes);
+    onDiagnostics?.({ source: diagnostics, bundle: bundle.diagnostics });
+    cached = Promise.resolve({ bundle, files });
+    return reparsed;
   };
   handler.invalidate = () => {
     cached = undefined;

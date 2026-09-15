@@ -118,9 +118,19 @@ If that matters, warm it: ask for `/graph` once yourself after `handler.warm()`,
 
 Nineteen times smaller, from the same corpus, purely from structure. If a page feels heavy, look at the directory it lives in before anything else.
 
-### If you move to a database source later
+### Staying fresh
 
-`handler.invalidate()` only affects the pod that received the call, so replicas will drift as the warehouse changes. Pick one: `noCache: true` and a query per request, a rolling restart when your pipeline publishes, or a Job that fans out to each pod.
+`handler.refresh()` re-reads the source and folds in what changed, re-parsing only the files that differ. On this bundle it is milliseconds; on 2000 documents it is 97 ms for ten changed files against a 2.7 s full parse. Cheap enough to poll:
+
+```js
+setInterval(() => void handler.refresh().catch((e) => console.error(e.message)), 10_000);
+```
+
+Two things to decide.
+
+**Each pod refreshes for itself.** A poll means every pod converges within its own interval, which is usually what you want and needs no coordination. A webhook does not: a Service round-robins, so one call reaches one pod and the rest drift. If you fire on publish, fan out to every pod — or keep a slow poll underneath as a backstop.
+
+**A refresh still runs the source read.** The parse is what gets cheaper, not the query. If the queries themselves are expensive, that is the argument for a source that can report what changed since a given point, rather than handing over everything each time.
 
 ## Docker
 

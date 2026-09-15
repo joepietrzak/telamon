@@ -363,6 +363,49 @@ The page asks for two stylesheets and one script. Serve them yourself from `tela
 
 [`examples/deploy`](../../examples/deploy) is a working one: a server, a Dockerfile, and measured numbers for what it costs to run.
 
+### Keeping a served bundle fresh
+
+`handler.refresh()` re-reads the source and folds in what changed. It is the cheap way to stay current, because markdown parsing is what makes reading a bundle expensive and it is entirely per-document: a file nobody touched parses to what it parsed to before, so it is reused.
+
+```ts
+// Poll, or call it from a webhook your publishing pipeline fires.
+setInterval(() => {
+  void handler.refresh().then((changed) => {
+    if (changed > 0) console.log(`refreshed: ${changed} files`);
+  });
+}, 10_000);
+```
+
+On a bundle of 2000 documents, against a 2.7 s full parse:
+
+| files changed | refresh |
+| --- | --- |
+| 1 | 73 ms |
+| 10 | 97 ms |
+| 100 | 218 ms |
+| none | 70 ms |
+
+The floor is about 70 ms, and it earns its keep: every document's links are re-resolved against the new set of paths, because adding a file un-breaks the links that pointed at it and removing one breaks them. That is a walk of syntax trees that already exist, with no markdown parsing. Only files whose contents actually differ are re-parsed, so a source that cannot say what changed can hand over everything and still pay only for what did.
+
+The updated bundle is a new object and the previous one is left untouched, so a request rendering from the old bundle finishes against a consistent view. When the concept graph is unchanged the previous graph object is carried over — which matters more than it sounds, because the settled force layout is cached against that object's identity and re-settling it would cost more than the whole refresh.
+
+`refresh()` resolves to the number of files it took in, and rejects if the source read failed, leaving the bundle you already had in place and still being served.
+
+### Updating a bundle yourself
+
+The same machinery, without the server:
+
+```ts
+import { parseBundle, updateBundle, diffFiles } from 'telamon';
+
+let bundle = parseBundle(await read());
+// ... later
+const files = await read();
+bundle = updateBundle(bundle, diffFiles(bundle.files, files));
+```
+
+`updateBundle(previous, { changed, deleted })` produces exactly what `parseBundle` would have produced from the same files — the tests assert that document by document, including diagnostics, backlinks and the graph. `diffFiles(previous, current)` is for when you have a fresh read and no idea what moved.
+
 ### Handler options
 
 | Option | Type | Notes |
@@ -381,7 +424,9 @@ The page asks for two stylesheets and one script. Serve them yourself from `tela
 | `noCache` | `boolean` | Re-read the source every request instead of caching it. |
 | `onDiagnostics` | `({ source, bundle }) => void` | Everything the read and the parse reported. |
 
-The bundle is read once and cached; concurrent first requests share a single read, a failed read is not cached, and a source that supports `watch` invalidates itself. `handler.invalidate()` forces a re-read, `handler.close()` stops watching.
+`handler.warm()` reads and parses up front, `handler.refresh()` folds in what changed, `handler.invalidate()` drops the cache, and `handler.close()` stops watching the source.
+
+The bundle is read once and cached; concurrent first requests share a single read, a failed read is not cached, and a source that supports `watch` invalidates itself. `handler.invalidate()` throws the cache away, `handler.close()` stops watching.
 
 That read is lazy — it happens on the first request. A long-lived server should `await handler.warm()` before it listens, so an unreadable bundle is a startup failure rather than a process that looks healthy and fails its first real request, and so the first visitor does not pay for the parse. On a large bundle that is seconds.
 

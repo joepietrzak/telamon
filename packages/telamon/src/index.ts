@@ -28,6 +28,11 @@ export type {
 } from './bundle/types.js';
 
 export { SUPPORTED_OKF_MAJOR, isBundle, parseBundle, type ParseOptions } from './bundle/parse.js';
+export {
+  diffFiles,
+  updateBundle,
+  type BundleChanges,
+} from './bundle/update.js';
 
 export {
   emptyFrontmatter,
