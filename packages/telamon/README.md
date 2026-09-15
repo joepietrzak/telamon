@@ -100,7 +100,7 @@ And when markup itself needs to change, replace a whole region with a slot:
 />
 ```
 
-Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
+Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Download`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
 
 ## What you get out of the box
 
@@ -110,8 +110,9 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Rela
 - **Typed relationships** — see below.
 - **Backlinks and a concept graph** — a "Referenced by" panel on every page, and a force-directed graph at `/graph`. The graph is code-split, so `d3-force` never lands in your main chunk, and it ships an equivalent text listing for keyboard and screen-reader use.
 - **A references toggle** — see below.
+- **A source download** — a header button that hands back every file in the bundle as a ZIP. The bundle is already in memory, so nothing is fetched and the archive is built on click; a reader who wants the markdown behind a page never has to go find the repository.
 
-Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false }}`.
+Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false, download: false }}`.
 
 ## Hiding provenance-only concepts
 
@@ -203,7 +204,7 @@ Unmodeled frontmatter keys are preserved verbatim on `doc.frontmatter.raw`. A ba
 | `components` | `Partial<OkfSlots>` | Region overrides. |
 | `markdownComponents` | `MarkdownComponents` | Element-level overrides. |
 | `classNames` | `Partial<Record<OkfSlotName, string>>` | Merged with the default `okf-*` classes. |
-| `features` | `OkfFeatures` | Toggle search, graph, backlinks, TOC. |
+| `features` | `OkfFeatures` | Toggle search, graph, backlinks, TOC, references toggle, download. |
 | `highlightCode` | `(code, language) => ReactNode` | See below. |
 | `resolveAssetUrl` | `(bundlePath) => string` | Maps non-markdown links and images to real URLs. |
 | `typeColor` | `(type) => string \| undefined` | Graph node colour per concept type. |

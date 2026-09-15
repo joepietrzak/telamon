@@ -1,5 +1,6 @@
 import { Backlinks } from './Backlinks.js';
 import { Breadcrumbs } from './Breadcrumbs.js';
+import { DownloadButton } from './DownloadButton.js';
 import { Header } from './Header.js';
 import { NavTree } from './NavTree.js';
 import { Toc } from './Toc.js';
@@ -25,6 +26,7 @@ export const DEFAULT_SLOTS: ResolvedSlots = {
   Toc,
   Backlinks,
   SearchBox,
+  Download: DownloadButton,
   NotFound,
   Footer: () => null,
 };

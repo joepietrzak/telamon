@@ -102,6 +102,23 @@
   color: var(--okf-color-fg, #16181d);
 }
 
+.okf-download {
+  padding: var(--okf-space-1, 0.25rem) var(--okf-space-2, 0.5rem);
+  font: inherit;
+  font-size: var(--okf-text-sm, 0.8125rem);
+  color: var(--okf-color-muted, #5b6270);
+  background: none;
+  border: var(--okf-border-width, 1px) solid var(--okf-color-border, #e2e5ea);
+  border-radius: var(--okf-radius-md, 6px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.okf-download:hover {
+  color: var(--okf-color-fg, #16181d);
+  background: var(--okf-color-surface, #f7f8fa);
+}
+
 .okf-nav-button {
   display: none;
   padding: var(--okf-space-1, 0.25rem) var(--okf-space-3, 0.75rem);

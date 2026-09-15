@@ -73,6 +73,7 @@ const DEFAULT_FEATURES: Required<OkfFeatures> = {
   backlinks: true,
   toc: true,
   referenceToggle: true,
+  download: true,
 };
 
 const NO_ROUTES: ReadonlySet<string> = new Set();

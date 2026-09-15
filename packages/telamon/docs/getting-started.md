@@ -185,7 +185,7 @@ Each entry is *merged with* the default `okf-*` class, not swapped for it:
 <OkfSite bundle={bundle} classNames={{ main: 'prose lg:prose-lg', sidebar: 'text-sm' }} />
 ```
 
-Named regions: `root`, `header`, `headerTitle`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `relationships`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
+Named regions: `root`, `header`, `headerTitle`, `download`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `relationships`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
 
 ### Slots (when the markup itself has to change)
 
@@ -210,11 +210,15 @@ Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Re
 ```tsx
 <OkfSite
   bundle={bundle}
-  features={{ search: true, graph: false, backlinks: true, toc: true, referenceToggle: true }}
+  features={{ search: true, graph: false, backlinks: true, toc: true, referenceToggle: true, download: true }}
 />
 ```
 
 All default to `true`. Turning `graph` off also means its chunk is never requested.
+
+### Handing back the source
+
+The header carries a Download button that packs every file in the bundle into a ZIP named after the site title. Nothing is fetched -- the bundle is already in memory, so the archive is built on click and costs nothing until someone asks for it. Turn it off with `features={{ download: false }}`, or build your own from `zipFiles(bundle.files)`.
 
 ### Hiding provenance-only concepts
 
