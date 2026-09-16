@@ -9,7 +9,8 @@
   ],
   "files": [
     "dist",
-    "docs"
+    "docs",
+    "vite-client.d.ts"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -39,6 +40,14 @@
       "types": "./dist/db/index.d.ts",
       "import": "./dist/db/index.js",
       "require": "./dist/db/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js",
+      "require": "./dist/vite/index.cjs"
+    },
+    "./vite-client": {
+      "types": "./vite-client.d.ts"
     },
     "./styles.css": "./dist/styles.css",
     "./tokens.css": "./dist/tokens.css",

@@ -257,6 +257,53 @@ A worked example — a SQLite warehouse, the mapping above it, and a script that
 - **A bad config throws**, at startup and before the database is touched: a mistyped table name is wiring, and failing loudly beats rendering a bundle quietly missing a table.
 - **Bad data does not.** Each becomes a `DbDiagnostic` and the rest of the bundle still renders — the same bargain `parseBundle` makes. Codes: `missing-column`, `empty-path-segment`, `invalid-json`, `path-collision`, `empty-result`, `empty-body`.
 
+## Shipping a bundle without shipping the corpus
+
+A bundler that inlines an OKF bundle inlines all of it, which makes first load O(corpus). Measured on 2000 Wikipedia articles: 44.6 MB of JavaScript, 14 MB over the wire, and 31.5 seconds before anything is on screen — and that was over loopback, before any network.
+
+Almost none of it is needed to draw a page. The navigation tree, the search index, the graph and backlinks are built from frontmatter and links — from what a document *is* and what it points at. Only the body of the document on screen needs a body, and on that corpus frontmatter is **5.4%** of the bytes.
+
+`telamon/vite` splits the two:
+
+```ts
+// vite.config.ts
+import { okfManifest } from 'telamon/vite';
+
+export default defineConfig({
+  plugins: [react(), okfManifest({ dir: './bundle' })],
+});
+```
+
+```tsx
+/// <reference types="telamon/vite-client" />
+import { OkfSite, useLazyBundle } from 'telamon';
+import { BODIES, MANIFEST } from 'virtual:okf-manifest';
+
+export function Docs() {
+  const { bundle, onNavigate } = useLazyBundle({ manifest: MANIFEST, bodies: BODIES });
+  return <OkfSite bundle={bundle} onNavigate={onNavigate} />;
+}
+```
+
+`MANIFEST` is every document's frontmatter, inlined. `BODIES` is a loader per document that compiles to a dynamic import, so each body is its own hashed chunk fetched on the navigation that wants it. Both are keyed by bundle-relative path. The dev server watches the directory and reloads when a document changes, because frontmatter decides routes and the tree — a new document is a different site, not a different component.
+
+On the same 2000-document corpus:
+
+| | inlined | split |
+| --- | --- | --- |
+| entry chunk | 44.6 MB | **3.0 MB** |
+| over the wire (gz) | 14.0 MB | **0.69 MB** |
+| `vite build` | 155s | **14s** |
+| first render | 31.5s | **3.5s** |
+| navigation to an unread document | free | ~40ms + one chunk |
+
+Two things to know before choosing it:
+
+- **Full-text search only covers what has been read.** Titles, descriptions, types and tags are complete from the first render because they are frontmatter; prose is not in the bundle until its document has been opened. Search over bodies needs the inlined build, or an index emitted at build time.
+- **A navigation is no longer free**, though ~40ms is not far off. Roughly 15ms of that is parsing the document and 25ms is recomputing what depends on the whole bundle, which grows with the corpus.
+
+A corpus small enough to ship whole should be shipped whole — under roughly 10 MB of markdown the inlined build stays near a second and every navigation is instant. Above that, this is how to keep a deployment that is a directory of static files rather than a process.
+
 ## Serving a bundle
 
 The library renders a bundle; where the files come from and who does the rendering are separate questions, and both have two answers.

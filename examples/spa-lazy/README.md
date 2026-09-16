@@ -10,14 +10,17 @@ the navigation tree, the search index, the graph, backlinks. Only the body of
 the document on screen needs a body. On a corpus of 2000 Wikipedia articles
 that split is **5.4%** against **94.6%**.
 
-So `vite-plugin-okf-manifest.ts` emits the frontmatter half as a virtual module
-that is inlined eagerly, and the bodies stay behind `import.meta.glob` *without*
-`eager`, which makes each document its own hashed chunk. `src/main.tsx` parses
-the manifest, and on every navigation fetches that one body and folds it in
-with `updateBundle`, which re-parses the one document rather than the corpus.
+`okfManifest` from `telamon/vite` emits the frontmatter half as a virtual
+module that is inlined eagerly, plus a dynamic import per body so each document
+becomes its own hashed chunk. `useLazyBundle` consumes that pair: it parses the
+manifest once, and on every navigation fetches one body and folds it in with
+`updateBundle`, which re-parses that document rather than the corpus.
 
 Reserved files travel whole: an `index.md` is a list of links, which is what
 the tree is built from.
+
+Both halves are library API now, so this example is a `vite.config.ts` and 23
+lines of `main.tsx`.
 
 ## Measured
 

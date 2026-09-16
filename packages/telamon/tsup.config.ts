@@ -11,6 +11,9 @@ export default defineConfig([
       'src/db/index.ts',
       'src/source/index.ts',
       'src/server/index.ts',
+      // The Vite plugin. Node-only, and never reached by a browser build --
+      // it reads the bundle off disk at build time.
+      'src/vite/index.ts',
     ],
     format: ['esm', 'cjs'],
     dts: true,

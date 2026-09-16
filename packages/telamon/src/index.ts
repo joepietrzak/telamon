@@ -112,6 +112,11 @@ export {
 
 // Site
 export { OkfProvider, OkfSite, type OkfProviderProps, type OkfSiteProps } from './components/OkfSite.js';
+export {
+  useLazyBundle,
+  type LazyBundle,
+  type LazyBundleOptions,
+} from './components/useLazyBundle.js';
 export { OkfRoutes } from './components/OkfRoutes.js';
 export { Layout } from './components/Layout.js';
 export {
