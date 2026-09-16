@@ -1,6 +1,6 @@
 # telamon
 
-Render a [Google Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) (OKF) bundle as a React single-page app.
+Render a [Google Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) (OKF) bundle as a React app, a server-rendered site, or a static build — from a directory or a database.
 
 An OKF bundle is a directory tree of markdown files with YAML frontmatter. `telamon` turns one into a browsable site: **routing comes from the directory structure**, **each page is the rendered markdown of one file**, and the OKF-specific frontmatter — provenance, trust, lifecycle — becomes page chrome.
 
