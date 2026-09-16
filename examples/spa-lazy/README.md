@@ -30,21 +30,20 @@ the tree is built from.
 | `vite build` | 155s | **14s** | 11× faster |
 | first render, loopback | 31.5s | **3.5s** | 9× faster |
 | first load @ 25 Mbps | ~36s | **~3.7s** | |
-| navigation to an unread document | free | ~160ms + a ~16 KB chunk | |
+| navigation to an unread document | free | **~40ms** + a ~16 KB chunk | |
 | artifact on disk | 44.7 MB | 52 MB | 2011 extra chunks |
 
 `parseBundle` over the manifest is 2.3s of that 3.5s; over the full corpus it
-is 29.6s. The remaining ~160ms per navigation is `updateBundle`, and it does
-not grow as you read: it is the same cost on the first document and the
-hundredth.
+is 29.6s. The ~40ms per navigation is `updateBundle`, and it does not grow as
+you read: it is the same cost on the first document and the hundredth.
 
 ## What it costs you
 
-- **A navigation to an unread document is no longer free.** ~160ms of it is
-  `updateBundle` recomputing what depends on the whole bundle — resolution,
-  tree, backlinks, graph — which is O(corpus) even though the parse is O(1).
-  At 2000 documents that is the number above; it will be larger on a larger
-  corpus.
+- **A navigation to an unread document is no longer free**, though it is close.
+  Of the ~40ms, about 15ms is parsing the one document and about 25ms is
+  `assembleBundle` rebuilding the route map, tree, backlinks and graph. That
+  part is still O(corpus) and genuinely depends on every document, so it is the
+  term that grows on a bundle much larger than this one.
 - **Search results and graph labels are available before bodies are.** They are
   built from frontmatter, so they are complete from the first paint. Full-text
   search over bodies is not, and would need either the eager build or an index

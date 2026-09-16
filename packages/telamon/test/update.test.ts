@@ -263,3 +263,76 @@ describe('what it costs', () => {
     expect(updateMs * 3).toBeLessThan(fullMs);
   });
 });
+
+/**
+ * Resolution asks one question about the rest of the bundle -- does this file
+ * exist -- so an unchanged document only has to be resolved again when a file
+ * arrives or leaves. Skipping that is most of what makes an update cheap, and
+ * getting the condition wrong means a link that silently stays broken after
+ * the file it points at shows up. These pin the condition from both sides.
+ */
+describe('resolution against a bundle whose membership did or did not change', () => {
+  const linked: Record<string, string> = {
+    'index.md': '# Root\n\n- [A](a.md)\n',
+    'a.md': '---\ntype: Concept\ntitle: A\n---\n\nSee [B](b.md) and [gone](missing.md).\n',
+    'b.md': '---\ntype: Concept\ntitle: B\n---\n\nBody of B.\n',
+  };
+  const brokenLinks = (bundle: ReturnType<typeof parseBundle>) =>
+    bundle.diagnostics.filter((d) => d.code === 'broken-link');
+
+  it('keeps a broken link reported exactly once when another body changes', () => {
+    const before = parseBundle(linked);
+    expect(brokenLinks(before)).toHaveLength(1);
+
+    const files = { ...linked, 'b.md': linked['b.md']!.replace('Body of B.', 'Rewritten.') };
+    const after = updateBundle(before, { changed: { 'b.md': files['b.md']! } });
+
+    // Carried forward, not dropped and not counted twice.
+    expect(brokenLinks(after)).toHaveLength(1);
+    expect(brokenLinks(after)[0]?.filePath).toBe('a.md');
+    expectSameAsFullParse(after, files);
+  });
+
+  it('reuses an untouched document by identity when only a body changed', () => {
+    const before = parseBundle(linked);
+    const after = updateBundle(before, {
+      changed: { 'b.md': linked['b.md']!.replace('Body of B.', 'Rewritten.') },
+    });
+
+    expect(after.byPath.get('a.md')).toBe(before.byPath.get('a.md'));
+    expect(after.byPath.get('b.md')).not.toBe(before.byPath.get('b.md'));
+  });
+
+  it('fixes a broken link when the file it points at arrives', () => {
+    const before = parseBundle(linked);
+    const files = {
+      ...linked,
+      'missing.md': '---\ntype: Concept\ntitle: Found\n---\n\nHere now.\n',
+    };
+    const after = updateBundle(before, { changed: { 'missing.md': files['missing.md']! } });
+
+    expect(brokenLinks(after)).toHaveLength(0);
+    expect(after.byPath.get('a.md')?.links.find((l) => l.route === '/missing')?.broken).toBe(false);
+    expectSameAsFullParse(after, files);
+  });
+
+  it('breaks a link when the file it points at leaves', () => {
+    const before = parseBundle(linked);
+    const { 'b.md': _gone, ...files } = linked;
+    const after = updateBundle(before, { deleted: ['b.md'] });
+
+    expect(brokenLinks(after).map((d) => d.filePath)).toEqual(['a.md', 'a.md']);
+    expect(after.byPath.get('a.md')?.links.find((l) => l.route === '/b')?.broken).toBe(true);
+    expectSameAsFullParse(after, files);
+  });
+
+  it('re-resolves an untouched document when membership changed', () => {
+    const before = parseBundle(linked);
+    const after = updateBundle(before, {
+      changed: { 'missing.md': '---\ntype: Concept\ntitle: Found\n---\n\nHere.\n' },
+    });
+    // a.md was not edited, but what its link means changed, so it is not the
+    // same document any more.
+    expect(after.byPath.get('a.md')).not.toBe(before.byPath.get('a.md'));
+  });
+});

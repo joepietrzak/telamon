@@ -30,6 +30,28 @@ const OWN_CONTENT_CODES = new Set<DiagnosticCode>([
   'frontmatter-on-reserved-file',
 ]);
 
+/**
+ * Diagnostics a document produces while resolving against the bundle.
+ *
+ * These depend on exactly one thing beyond the document itself: which files
+ * exist. They survive a change to another document's *contents*, and not a
+ * change to which documents there are.
+ *
+ * `route-collision`, `unresolved-index-entry` and `unsupported-okf-version` are
+ * deliberately absent. Those are recomputed by `assembleBundle` on every
+ * update, so carrying them forward would report each of them twice.
+ */
+const RESOLUTION_CODES = new Set<DiagnosticCode>([
+  'broken-link',
+  'broken-relationship',
+  'invalid-relationship',
+]);
+
+const OWN_AND_RESOLUTION_CODES = new Set<DiagnosticCode>([
+  ...OWN_CONTENT_CODES,
+  ...RESOLUTION_CODES,
+]);
+
 function sameGraph(a: { nodes: GraphNode[]; edges: GraphEdge[] }, b: typeof a): boolean {
   if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
   for (const [i, node] of a.nodes.entries()) {
@@ -119,11 +141,28 @@ export function updateBundle(
   const markdownPaths = new Set(Object.keys(files).filter(isMarkdownPath));
   const hasFile = (path: string) => markdownPaths.has(path);
 
-  // Everything a document said about its own text still stands; everything it
-  // said about the bundle is recomputed below.
+  /**
+   * Whether the set of documents changed, as opposed to their contents.
+   *
+   * Resolution asks exactly one question about the rest of the bundle -- does
+   * this file exist -- so an unchanged document resolves to what it already
+   * resolved to unless a file arrived or left. Editing a body cannot break
+   * anyone else's link; adding the file that link points at can fix it.
+   *
+   * `previous.byPath` holds precisely the markdown documents, so equal sizes
+   * plus containment is set equality.
+   */
+  const membershipChanged =
+    markdownPaths.size !== previous.byPath.size ||
+    [...markdownPaths].some((path) => !previous.byPath.has(path));
+
+  // Everything a document said about its own text still stands. What it said
+  // about the bundle stands too, as long as the bundle still holds the same
+  // documents -- otherwise it is dropped here and re-derived below.
+  const keep = membershipChanged ? OWN_CONTENT_CODES : OWN_AND_RESOLUTION_CODES;
   const diagnostics: BundleDiagnostic[] = previous.diagnostics.filter(
     (diagnostic) =>
-      OWN_CONTENT_CODES.has(diagnostic.code) &&
+      keep.has(diagnostic.code) &&
       diagnostic.filePath !== undefined &&
       markdownPaths.has(diagnostic.filePath) &&
       !reparse.has(diagnostic.filePath),
@@ -136,10 +175,17 @@ export function updateBundle(
 
   for (const filePath of [...markdownPaths].sort()) {
     const existing = previous.byPath.get(filePath);
-    const doc =
-      existing && !reparse.has(filePath)
-        ? resolveDocument(existing, context)
-        : parseDocument(filePath, files[filePath]!, context);
+    let doc: OkfDoc;
+    if (existing === undefined || reparse.has(filePath)) {
+      doc = parseDocument(filePath, files[filePath]!, context);
+    } else if (membershipChanged) {
+      doc = resolveDocument(existing, context);
+    } else {
+      // Nothing it could say about the bundle has changed, so it is still the
+      // answer. Reused by identity, which is also what lets a consumer memoize
+      // on the document it was handed.
+      doc = existing;
+    }
     docs.push(doc);
     byPath.set(filePath, doc);
   }
