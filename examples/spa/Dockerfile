@@ -3,7 +3,7 @@
 #
 # One change before this builds as written: the example depends on `telamon` as
 # `workspace:*`, a pnpm protocol npm cannot resolve inside an image. In a real
-# deployment that is a published version -- `"telamon": "^0.2.0"` -- and the
+# deployment that is a published version -- `"telamon": "^0.3.0"` -- and the
 # install below works unchanged.
 
 FROM node:22-alpine AS build
