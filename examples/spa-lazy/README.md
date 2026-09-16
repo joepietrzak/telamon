@@ -3,6 +3,9 @@
 Same deployment as [`../spa`](../spa) — static files, no server, no database —
 but the first load carries an index of the corpus instead of the corpus.
 
+This is Road 2 of [three roads](../../packages/telamon/docs/three-roads.md),
+which walks through standing this example up end to end.
+
 ## The split
 
 Everything that needs the *whole* bundle is built from frontmatter and links:

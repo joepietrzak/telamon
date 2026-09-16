@@ -3,6 +3,9 @@
 The whole corpus compiled into the app, served as static files. No server knows
 what an OKF document is.
 
+This is Road 1 of [three roads](../../packages/telamon/docs/three-roads.md),
+which covers when to take it and what the alternatives cost.
+
 ```bash
 pnpm install
 pnpm --filter telamon-spa dev        # http://localhost:5173

@@ -16,6 +16,8 @@ npm install telamon
 
 **New here? Start with the [getting-started guide](./docs/getting-started.md)** — a walkthrough from loading a bundle to theming and serving it. This README is the reference.
 
+**Deciding how to ship it? Read [three roads](./docs/three-roads.md)** — the choice between compiling the corpus into a static build, shipping an index of it, or running a server, with what each one measured on the same 2000-document bundle.
+
 ## Quick start
 
 ```tsx

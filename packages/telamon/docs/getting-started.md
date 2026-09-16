@@ -2,7 +2,7 @@
 
 Take an OKF bundle you have on disk and turn it into a running site, then work outwards through the props you'll actually reach for.
 
-The [README](../README.md) is the reference — every prop, every export. This is the walkthrough.
+The [README](../README.md) is the reference — every prop, every export. This is the walkthrough. When you get to deploying, [three roads](./three-roads.md) covers the choice between a static build, a split static build, and a server.
 
 ---
 
