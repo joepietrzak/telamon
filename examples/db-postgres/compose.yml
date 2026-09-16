@@ -1,0 +1,29 @@
+# `docker compose up` for a warehouse and a site in front of it.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: telamon
+      POSTGRES_PASSWORD: telamon
+      POSTGRES_DB: telamon
+    # Loaded once, on an empty data directory.
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U telamon -d telamon']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    ports:
+      - '5432:5432'
+
+  site:
+    build: .
+    environment:
+      DATABASE_URL: postgres://telamon:telamon@db:5432/telamon
+      PORT: '3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '3000:3000'

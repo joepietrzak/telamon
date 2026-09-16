@@ -1,0 +1,45 @@
+{
+  "okfVersion": "0.2",
+  "title": "Acme metrics",
+  "tables": [
+    {
+      "table": "analytics.okf_metrics",
+      "path": "metrics/{metric_name}.md",
+      "type": "Metric",
+      "title": "display_name",
+      "body": "definition_md",
+      "frontmatter": {
+        "description": "summary",
+        "tags": "tags",
+        "status": "lifecycle",
+        "stale_after": "review_by",
+        "generated": "provenance",
+        "relationships": "relationships"
+      },
+      "changedColumn": "updated_at",
+      "where": "is_published",
+      "orderBy": "metric_name",
+      "directory": {
+        "title": "Metrics",
+        "description": "Agreed definitions for the numbers leadership reads."
+      }
+    },
+    {
+      "table": "analytics.okf_tables",
+      "path": "tables/{table_name}.md",
+      "type": "Table",
+      "title": "table_name",
+      "template": "Grain: one row per {grain}.\n\nApproximately {row_estimate} rows at last count.",
+      "frontmatter": {
+        "description": "notes",
+        "resource": "fqn"
+      },
+      "changedColumn": "updated_at",
+      "orderBy": "table_name",
+      "directory": {
+        "title": "Tables",
+        "description": "Warehouse tables the metrics read from."
+      }
+    }
+  ]
+}

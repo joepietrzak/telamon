@@ -653,3 +653,61 @@ describe('paths out of data', () => {
     ]);
   });
 });
+
+/**
+ * The claims `examples/db-postgres` makes about placeholders.
+ *
+ * Worth pinning because the failure is asymmetric: a full read binds nothing,
+ * so a wrong placeholder style works in development and fails on the first
+ * incremental read. That is a production-only syntax error.
+ */
+describe('binding for engines that do not use `?`', () => {
+  const mapping: DbConfig['tables'][number] = {
+    table: 'analytics.okf_metrics',
+    path: 'metrics/{metric_name}.md',
+    changedColumn: 'updated_at',
+    where: 'is_published',
+    orderBy: 'metric_name',
+  };
+
+  it('writes the style the engine asks for', () => {
+    expect(buildChangedStatement(mapping)).toBe(
+      'select * from analytics.okf_metrics where (is_published) and updated_at > ? order by metric_name',
+    );
+    expect(buildChangedStatement(mapping, (i) => `$${i}`)).toBe(
+      'select * from analytics.okf_metrics where (is_published) and updated_at > $1 order by metric_name',
+    );
+    expect(buildChangedStatement(mapping, (i) => `@p${i}`)).toContain('updated_at > @p1');
+  });
+
+  it('binds nothing on a full read, which is why the mistake hides', () => {
+    // No placeholder anywhere: the statement a first read sends is the same
+    // whatever engine it is bound for.
+    expect(buildStatement(mapping)).toBe(
+      'select * from analytics.okf_metrics where is_published order by metric_name',
+    );
+  });
+
+  it('accepts a schema-qualified name as a plain table', () => {
+    expect(() =>
+      parseDbConfig({ okfVersion: '0.2', tables: [mapping] }),
+    ).not.toThrow();
+  });
+
+  it('carries the placeholder through to the source', async () => {
+    const seen: string[] = [];
+    const source = databaseSource(
+      { okfVersion: '0.2', tables: [mapping] },
+      async (sql) => {
+        seen.push(sql);
+        return [];
+      },
+      { placeholder: (i) => `$${i}` },
+    );
+    await source.load();
+    await source.loadChanged!('2026-01-01T00:00:00.000Z');
+
+    expect(seen[0]).not.toContain('$1');
+    expect(seen[1]).toContain('updated_at > $1');
+  });
+});

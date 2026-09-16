@@ -270,8 +270,14 @@ row costs **515ms end to end** where a full re-read costs 30 seconds. Run
 a deletion, and cannot see a transaction that commits late with an early
 timestamp.
 
-Complete example: [`examples/deploy`](../../../examples/deploy), and
-[`examples/db-sync`](../../../examples/db-sync) for the mapping.
+`placeholder` is how an engine that does not bind `?` says so — Postgres
+binds `$1`. A full read binds nothing, so getting it wrong works in development
+and fails on the first incremental read.
+
+Complete examples: [`examples/deploy`](../../../examples/deploy) for a
+directory, [`examples/db-postgres`](../../../examples/db-postgres) for a real
+engine end to end, and [`examples/db-sync`](../../../examples/db-sync) for the
+mapping on SQLite.
 
 ---
 

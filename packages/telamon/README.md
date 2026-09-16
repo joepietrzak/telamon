@@ -228,6 +228,8 @@ export async function loader() {
 
 What comes back is the same `Record<path, contents>` map `OkfSite` already takes, so routing, search, backlinks, and the graph work on a database-backed bundle exactly as on a checked-in one.
 
+telamon never opens a connection: you pass a `query` function and keep your own pooling, TLS and timeouts. An engine that binds something other than `?` says so with `placeholder` — `(i) => \`$${i}\`` for Postgres. [`examples/db-postgres`](../../examples/db-postgres) runs the whole thing against a real server, including live refresh.
+
 ### The mapping
 
 | Key | Type | Notes |
