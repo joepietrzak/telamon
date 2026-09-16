@@ -79,7 +79,7 @@ export async function serve(args: ServeArgs): Promise<RunningServer> {
         const path = new URL(req.url ?? '/', 'http://localhost').pathname;
 
         // Only the static files are ours. The rest of the prefix belongs to the
-        // handler's endpoints -- search.json, bundle.zip -- and intercepting
+        // handler's endpoints -- search.json, nav.json -- and intercepting
         // those here would 404 them before they were ever reached.
         const asset = path.startsWith(`${ASSET_PREFIX}/`)
           ? ASSETS[path.slice(ASSET_PREFIX.length + 1)]

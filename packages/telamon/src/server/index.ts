@@ -6,7 +6,7 @@
  * the bundle came off a disk or out of a warehouse.
  *
  * The page it sends carries the route's markup and nothing else. Search, the
- * source download, and the graph are answered by the server, so page weight
+ * and the graph are answered by the server, so page weight
  * does not grow with the corpus.
  */
 export {
@@ -22,7 +22,6 @@ export { navChildren, type NavChild } from './nav.js';
 
 export {
   SearchResultsPage,
-  ServerDownloadLink,
   ServerReferencesToggle,
   ServerSearchBox,
   type SearchResultsPageProps,

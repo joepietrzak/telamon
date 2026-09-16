@@ -1,6 +1,5 @@
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { archiveFileName, zipFiles } from '../bundle/archive.js';
 import { parseBundle } from '../bundle/parse.js';
 import { diffFiles, filesToReparse, updateBundle } from '../bundle/update.js';
 import { hrefToRoute } from '../bundle/paths.js';
@@ -12,7 +11,6 @@ import type { OkfFeatures, OkfSlots } from '../components/slots.js';
 import { createHistoryRouter } from '../router/history.js';
 import type { BundleSource, SourceCursor, SourceDiagnostic } from '../source/types.js';
 import {
-  ServerDownloadLink,
   ServerReferencesToggle,
   ServerSearchBox,
   SearchResultsPage,
@@ -41,7 +39,7 @@ export interface BundleHandlerOptions {
   /**
    * Send the enhancement script. On by default.
    *
-   * Every feature works without it -- search is a form, the download is a link,
+   * Every feature works without it -- search is a form,
    * the references toggle is a link, the graph is rendered -- so turning it off
    * costs polish rather than function.
    */
@@ -139,10 +137,10 @@ const json = (value: unknown) =>
  * Serve a bundle, rendered on the server.
  *
  * The page that reaches the browser carries the route's markup and nothing
- * else: no bundle, no corpus, no parse to redo. The three features that do want
- * the whole bundle ask the server for exactly what they need -- a search query,
- * a zip of the sources -- so a page stays the same size whether the bundle
- * holds ten documents or ten thousand.
+ * else: no bundle, no corpus, no parse to redo. The features that do want the
+ * whole bundle ask the server for exactly what they need -- a search query, a
+ * level of the navigation tree -- so a page stays the same size whether the
+ * bundle holds ten documents or ten thousand.
  *
  * Takes and returns web standard `Request` and `Response`, so the same handler
  * runs under Node's `http` server, a worker runtime, or any framework that
@@ -248,21 +246,6 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
         return json({ children });
       }
 
-      if (endpoint === 'bundle.zip') {
-        const { bundle, files } = await loaded();
-        // The same name the download link asks for, so the two agree.
-        const siteTitle = title ?? titleOf(bundle);
-        const archive = zipFiles(files);
-        return new Response(archive, {
-          status: 200,
-          headers: {
-            'content-type': 'application/zip',
-            'content-length': String(archive.byteLength),
-            'content-disposition': `attachment; filename="${archiveFileName(siteTitle)}"`,
-          },
-        });
-      }
-
       return new Response('Not found', { status: 404 });
     }
 
@@ -284,7 +267,6 @@ export function createBundleHandler(options: BundleHandlerOptions): BundleHandle
 
     const components: Partial<OkfSlots> = {
       SearchBox: () => createElement(ServerSearchBox, { urls, query }),
-      Download: () => createElement(ServerDownloadLink, { urls, name: archiveFileName(siteTitle) }),
       ReferencesToggle: () => createElement(ServerReferencesToggle, { route }),
       // Eager: `lazy` suspends, and a render that cannot wait would emit the
       // loading fallback as the finished page.

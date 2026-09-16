@@ -51,9 +51,9 @@ function toRows(result: QueryResult, statement: string): Row[] {
  * ```
  *
  * Node-side by design: the file map it produces is the same shape `OkfSite`
- * already takes, so everything downstream -- routing, search, the graph, the
- * source download -- works on a database-backed bundle exactly as on a
- * checked-in one.
+ * already takes, so everything downstream -- routing, search, the graph,
+ * backlinks -- works on a database-backed bundle exactly as on a checked-in
+ * one.
  */
 export async function loadBundle(
   /** A `DbConfig`, or the JSON you parsed out of a file. Validated either way. */

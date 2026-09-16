@@ -100,7 +100,7 @@ And when markup itself needs to change, replace a whole region with a slot:
 />
 ```
 
-Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `Download`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
+Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `NotFound`, `Footer`. Define them outside render, or memoize them — a new function identity each render remounts that region.
 
 ## What you get out of the box
 
@@ -112,9 +112,7 @@ Slots: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Rela
 - **A references toggle** — see below.
 - **Sources** — read a bundle from a directory or out of a database, behind one interface. See below.
 - **A server and a CLI** — `npx telamon serve ./bundle` to read one locally, and the same handler deployed so others can. See below.
-- **A source download** — a header control that hands back every file in the bundle as a ZIP, so a reader who wants the markdown behind a page never has to go find the repository. In an app it is a button building the archive from the bundle already in memory; on a served site it is a link to a zip the server builds.
-
-Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false, download: false }}`.
+Turn any of it off with `features={{ search: false, graph: false, backlinks: false, toc: false, referenceToggle: false }}`.
 
 ## Hiding provenance-only concepts
 
@@ -226,7 +224,7 @@ export async function loader() {
 // -> <OkfSite bundle={files} />
 ```
 
-What comes back is the same `Record<path, contents>` map `OkfSite` already takes, so routing, search, backlinks, the graph, and the source download work on a database-backed bundle exactly as on a checked-in one.
+What comes back is the same `Record<path, contents>` map `OkfSite` already takes, so routing, search, backlinks, and the graph work on a database-backed bundle exactly as on a checked-in one.
 
 ### The mapping
 
@@ -379,13 +377,12 @@ interface BundleSource {
 
 The rendered page, and nothing else. No bundle, no corpus, no parse to redo in the browser.
 
-That is the whole point of the server mode. Only three things ever want the entire bundle — search, the source download, and the graph — and each is answered by the server instead:
+That is the whole point of the server mode. Only two things ever want the entire bundle — search and the graph — and each is answered by the server instead:
 
 | | |
 | --- | --- |
 | `GET /search?q=` | A rendered results page. The header search box is a real form that submits to it. |
 | `GET /_telamon/search.json?q=` | The same results as JSON, for the enhancement script. |
-| `GET /_telamon/bundle.zip` | The sources, zipped by the server. The download is a plain link. |
 | `GET /_telamon/health` | `200` once the bundle is loadable, `503` while it is not. For a readiness probe. |
 | `GET /_telamon/nav.json?route=` | One level of the navigation tree, for the sidebar's expand control. |
 | the graph | Rendered on the server at `graphRoute`, settled layout and all. |
@@ -396,7 +393,7 @@ What does grow is the sidebar, though not with the bundle: it renders the branch
 
 ### Progressive enhancement, not hydration
 
-Everything on a served page works with JavaScript switched off: search submits a form, the download is a link, the references toggle is a link that puts the state in the URL, and the graph is already drawn, every node a link you can click.
+Everything on a served page works with JavaScript switched off: search submits a form, the references toggle is a link that puts the state in the URL, and the graph is already drawn, every node a link you can click.
 
 The enhancement script — a few kilobytes of plain DOM code, no React — upgrades that in place: the narrow-screen navigation button starts working, `/` and ⌘K focus the search box, results appear as you type instead of on submit, and the graph gains drag-to-pan and pinch-to-zoom. The graph needs no layout work to do it: the server ran the simulation and the coordinates are already in the markup, so panning moves a group that is already there rather than shipping d3 to compute one. Zoom is gated behind ctrl/⌘ the way a map embed gates it — a bare wheel belongs to the page, so nobody gets stuck scrolling past a tall graph — and a trackpad pinch already arrives as a ctrl-wheel, so it works without asking. It carries no bundle; the only thing it ever fetches is the result of a search someone actually typed. `enhance: false` omits it entirely, and the site still works.
 
@@ -560,7 +557,7 @@ Unmodeled frontmatter keys are preserved verbatim on `doc.frontmatter.raw`. A ba
 | `components` | `Partial<OkfSlots>` | Region overrides. |
 | `markdownComponents` | `MarkdownComponents` | Element-level overrides. |
 | `classNames` | `Partial<Record<OkfSlotName, string>>` | Merged with the default `okf-*` classes. |
-| `features` | `OkfFeatures` | Toggle search, graph, backlinks, TOC, references toggle, download. |
+| `features` | `OkfFeatures` | Toggle search, graph, backlinks, TOC, references toggle. |
 | `highlightCode` | `(code, language) => ReactNode` | See below. |
 | `resolveAssetUrl` | `(bundlePath) => string` | Maps non-markdown links and images to real URLs. |
 | `typeColor` | `(type) => string \| undefined` | Graph node colour per concept type. |

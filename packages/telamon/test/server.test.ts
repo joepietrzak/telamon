@@ -157,7 +157,7 @@ describe('serving a bundle', () => {
     // And every feature is still reachable, because none of them needed it.
     expect(html).toContain('href="/metrics"');
     expect(html).toContain('action="/search"');
-    expect(html).toContain('href="/_telamon/bundle.zip"');
+    expect(html).toContain('references=0');
   });
 
   it('honours a basename, and disowns URLs outside it', async () => {
@@ -268,22 +268,6 @@ describe('the endpoints that replaced the bundle', () => {
     expect(hidden.results.every((r) => !r.route.startsWith('/references/'))).toBe(true);
     expect(hidden.results.length).toBeLessThanOrEqual(shown.results.length);
     expect(hidden.hiddenMatches).toBeGreaterThan(0);
-  });
-
-  it('serves the sources as a zip the browser will save', async () => {
-    const handler = createBundleHandler({ source: memorySource(), title: 'Acme analytics' });
-    const response = await handler(get('/_telamon/bundle.zip'));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toBe('application/zip');
-    expect(response.headers.get('content-disposition')).toBe(
-      'attachment; filename="acme-analytics.zip"',
-    );
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    // A real local file header, not an error page with a zip content type.
-    expect([...bytes.slice(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
-    expect(Number(response.headers.get('content-length'))).toBe(bytes.length);
   });
 
   it('renders a search results page for a form submission', async () => {

@@ -47,7 +47,7 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
     // Only the static files are ours; everything else under the prefix is the
-    // handler's -- search.json and bundle.zip live there.
+    // handler's -- search.json and nav.json live there.
     const asset = url.pathname.startsWith(`${ASSET_PREFIX}/`)
       ? ASSETS[url.pathname.slice(ASSET_PREFIX.length + 1)]
       : undefined;

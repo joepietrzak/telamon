@@ -14,10 +14,10 @@ import { ENHANCE_SCRIPT_ID, type EnhancePayload } from './ids.js';
  * Progressive enhancement for a served page.
  *
  * Deliberately not React and deliberately tiny: the page arrives rendered, and
- * everything on it already works -- search submits a form, the download is a
- * link, the references toggle is a link. This upgrades those in place rather
- * than supplying them, so a browser that never runs it loses polish and no
- * function at all.
+ * everything on it already works -- search submits a form, the references
+ * toggle is a link, the graph is already drawn. This upgrades those in place
+ * rather than supplying them, so a browser that never runs it loses polish and
+ * no function at all.
  *
  * It carries no bundle. The only data it ever fetches is the result of a search
  * the reader actually typed.

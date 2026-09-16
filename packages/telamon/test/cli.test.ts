@@ -39,7 +39,7 @@ describe('parseServeArgs', () => {
  *
  * The handler's own tests cannot see this seam: the CLI serves its static files
  * from the same prefix the endpoints live under, and an earlier version
- * answered everything there itself -- so `search.json` and `bundle.zip` came
+ * answered everything there itself -- so `search.json` and `nav.json` came
  * back 404 from a binary whose unit tests all passed.
  */
 describe('the server the CLI starts', () => {
@@ -84,10 +84,10 @@ describe('the server the CLI starts', () => {
     const found = (await search.json()) as { results: { route: string }[] };
     expect(found.results.map((r) => r.route)).toContain('/metrics/gross_revenue');
 
-    const zip = await fetch(`${base}/_telamon/bundle.zip`);
-    expect(zip.status).toBe(200);
-    expect(zip.headers.get('content-disposition')).toContain('acme-analytics.zip');
-    expect([...new Uint8Array(await zip.arrayBuffer()).slice(0, 2)]).toEqual([0x50, 0x4b]);
+    const nav = await fetch(`${base}/_telamon/nav.json?route=/metrics`);
+    expect(nav.status).toBe(200);
+    const level = (await nav.json()) as { children: { route: string }[] };
+    expect(level.children.map((c) => c.route)).toContain('/metrics/gross_revenue');
   });
 
   it('still 404s a path under the prefix that is neither', async () => {

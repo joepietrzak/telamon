@@ -214,7 +214,7 @@ Each entry is *merged with* the default `okf-*` class, not swapped for it:
 <OkfSite bundle={bundle} classNames={{ main: 'prose lg:prose-lg', sidebar: 'text-sm' }} />
 ```
 
-Named regions: `root`, `header`, `headerTitle`, `download`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `relationships`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
+Named regions: `root`, `header`, `headerTitle`, `sidebar`, `nav`, `navLink`, `body`, `main`, `article`, `breadcrumbs`, `conceptHeader`, `metaRow`, `toc`, `backlinks`, `relationships`, `sources`, `search`, `searchResults`, `referencesToggle`, `graph`, `footer`.
 
 ### Slots (when the markup itself has to change)
 
@@ -228,7 +228,7 @@ const slots = {
 <OkfSite bundle={bundle} components={slots} markdownComponents={{ blockquote: Callout }} />;
 ```
 
-Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `Download`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
+Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Relationships`, `Toc`, `Backlinks`, `SearchBox`, `Graph`, `ReferencesToggle`, `NotFound`, `Footer`. `markdownComponents` reaches individual rendered elements (`h2`, `table`, `code`, …).
 
 ---
 
@@ -239,15 +239,11 @@ Regions: `Header`, `Sidebar`, `Breadcrumbs`, `ConceptHeader`, `SourcesList`, `Re
 ```tsx
 <OkfSite
   bundle={bundle}
-  features={{ search: true, graph: false, backlinks: true, toc: true, referenceToggle: true, download: true }}
+  features={{ search: true, graph: false, backlinks: true, toc: true, referenceToggle: true }}
 />
 ```
 
 All default to `true`. Turning `graph` off also means its chunk is never requested.
-
-### Handing back the source
-
-The header carries a Download control that hands back every file in the bundle as a ZIP named after the site title. In an app it is a button: the bundle is already in memory, so the archive is built on click and costs nothing until someone asks for it. On a served site it is a link to a zip the server builds, which means it works with JavaScript off. Turn it off with `features={{ download: false }}`, or build your own from `zipFiles(bundle.files)`.
 
 ### Hiding provenance-only concepts
 
@@ -357,7 +353,7 @@ It takes web standard `Request` and `Response`, so it runs anywhere that speaks 
 
 The rendered page and nothing else. No bundle travels to the browser, so a page weighs what the page weighs: make every document in a bundle a thousand times longer and a served page grows by one document, the one it renders.
 
-The three features that want the whole corpus are answered by the server — search is a form submitting to `/search`, the source download is a link to a zip the server builds, and the graph is drawn before the page is sent, nodes and all, each one a link you can click. All of which means the site works with JavaScript switched off entirely. A small script then upgrades it in place: the narrow-screen nav button, `/` and ⌘K, search results as you type, and drag-to-pan and pinch-to-zoom on the graph. It is under 3 KB over the wire and carries no React, no d3 and no bundle. `--no-script` leaves it out and loses no function.
+The two features that want the whole corpus are answered by the server — search is a form submitting to `/search`, and the graph is drawn before the page is sent, nodes and all, each one a link you can click. All of which means the site works with JavaScript switched off entirely. A small script then upgrades it in place: the narrow-screen nav button, `/` and ⌘K, search results as you type, and drag-to-pan and pinch-to-zoom on the graph. It is under 3 KB over the wire and carries no React, no d3 and no bundle. `--no-script` leaves it out and loses no function.
 
 Full option table in the [README](../README.md#serving-a-bundle).
 

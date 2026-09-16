@@ -33,13 +33,12 @@ afterEach(() => {
 });
 
 describe('the served page before any script runs', () => {
-  it('already carries a working search form, download, and toggle', async () => {
+  it('already carries a working search form and references toggle', async () => {
     await load('/');
 
     const form = document.querySelector('form[role="search"]')!;
     expect(form.getAttribute('action')).toBe('/search');
     expect(form.getAttribute('method')).toBe('get');
-    expect(document.querySelector('a[href="/_telamon/bundle.zip"]')).not.toBeNull();
     expect(document.querySelector('a.okf-references-toggle')?.getAttribute('href')).toBe(
       '/?references=0',
     );

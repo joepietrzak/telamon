@@ -73,7 +73,6 @@ export {
   referenceRoutes,
 } from './bundle/references.js';
 export { collectLinks, parseIndexEntries } from './bundle/links.js';
-export { archiveFileName, zipFiles, type ZipOptions } from './bundle/archive.js';
 
 export {
   buildSearchIndex,
@@ -135,7 +134,6 @@ export { Backlinks } from './components/Backlinks.js';
 export { Relationships, formatRelationshipType } from './components/Relationships.js';
 export { ReferencesToggle } from './components/ReferencesToggle.js';
 export { SearchBox } from './components/search/SearchBox.js';
-export { DownloadButton } from './components/DownloadButton.js';
 export { SearchResults, type SearchResultsProps } from './components/search/SearchResults.js';
 
 export {

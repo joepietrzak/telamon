@@ -52,7 +52,6 @@ export interface OkfSlots {
   Graph: ComponentType<Record<string, never>>;
   /** The control that hides provenance-only reference concepts. */
   ReferencesToggle: ComponentType<Record<string, never>>;
-  Download: ComponentType<Record<string, never>>;
   NotFound: ComponentType<NotFoundProps>;
   Footer: ComponentType<Record<string, never>>;
 }
@@ -67,7 +66,6 @@ export type OkfSlotName =
   | 'root'
   | 'header'
   | 'headerTitle'
-  | 'download'
   | 'sidebar'
   | 'nav'
   | 'navLink'
@@ -97,8 +95,6 @@ export interface OkfFeatures {
   toc?: boolean;
   /** Offer the control that hides provenance-only reference concepts. */
   referenceToggle?: boolean;
-  /** Offer the button that downloads the bundle's source files as a ZIP. */
-  download?: boolean;
 }
 
 export interface OkfConfig {

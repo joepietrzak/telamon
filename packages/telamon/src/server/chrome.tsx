@@ -6,7 +6,7 @@ import type { SearchResult } from '../bundle/search.js';
  * Chrome for a served site.
  *
  * A served page carries no bundle, so the three features that want the whole
- * corpus -- search, the source download, and the references toggle -- cannot be
+ * corpus -- search and the references toggle -- cannot be
  * the browser-side components. Each becomes a plain link or form the server
  * answers, which means all three work with JavaScript switched off entirely;
  * the enhancement script upgrades them in place rather than supplying them.
@@ -51,16 +51,6 @@ export function ServerReferencesToggle({ route }: { route: string }) {
   return (
     <a className={className} href={target} rel="nofollow">
       {visible ? 'Hide references' : 'Show references'}
-    </a>
-  );
-}
-
-/** The zip is built by the server, so the download needs no script at all. */
-export function ServerDownloadLink({ urls, name }: { urls: ServerChromeUrls; name: string }) {
-  const className = useClassName('download');
-  return (
-    <a className={className} href={`${urls.assetPrefix}/bundle.zip`} download={name}>
-      Download
     </a>
   );
 }
