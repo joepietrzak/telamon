@@ -22,6 +22,11 @@ the tree is built from.
 Both halves are library API now, so this example is a `vite.config.ts` and 23
 lines of `main.tsx`.
 
+`okfBudget({ max: '1 MB' })` sits alongside them as a guard: inline the corpus
+again and the build fails here, naming the size and the chunk, rather than the
+regression reaching a reader. On this corpus the inlined build reports 13.9 MB
+gzipped against the same budget the split build passes at 669 KB.
+
 ## Measured
 
 2009 documents, 33 MB of markdown, against the eager build in `../spa`:

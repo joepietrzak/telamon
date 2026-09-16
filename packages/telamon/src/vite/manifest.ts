@@ -6,15 +6,51 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
  *
  * telamon does not depend on Vite -- a documentation renderer that drags a
  * bundler into everyone's install is a worse library -- so the hooks are typed
- * by what they are rather than by importing `Plugin`. The result satisfies
- * Vite's interface, which is all `plugins: [okfManifest(...)]` needs.
+ * by what they are rather than by importing `Plugin`. Every hook is optional,
+ * the way Vite declares them, and the result satisfies Vite's interface, which
+ * is all `plugins: [okfManifest(...)]` needs.
  */
 export interface VitePluginLike {
   name: string;
-  resolveId(id: string): string | undefined;
-  load(this: { addWatchFile?: (id: string) => void }, id: string): Promise<string | undefined>;
-  configureServer(server: ViteServerLike): void;
+  resolveId?(id: string): string | undefined;
+  load?(this: RollupContextLike, id: string): Promise<string | undefined>;
+  configureServer?(server: ViteServerLike): void;
+  generateBundle?(this: RollupContextLike, options: unknown, output: OutputBundleLike): void;
 }
+
+/** The parts of Rollup's plugin context these hooks reach for. */
+export interface RollupContextLike {
+  addWatchFile?: (id: string) => void;
+  warn?: (message: string) => void;
+  error?: (message: string) => never;
+}
+
+/** One emitted file: a chunk of JavaScript, or an asset copied through. */
+export interface OutputChunkLike {
+  type: 'chunk';
+  fileName: string;
+  code: string;
+  isEntry: boolean;
+  /** Chunks pulled in by a static import, and so part of the same first load. */
+  imports: string[];
+  /** Chunks behind an `import()`, fetched later or never. */
+  dynamicImports: string[];
+}
+
+export interface OutputAssetLike {
+  type: 'asset';
+  fileName: string;
+  source: string | Uint8Array;
+}
+
+export type OutputBundleLike = Record<string, OutputChunkLike | OutputAssetLike>;
+
+/**
+ * What `okfManifest` returns: the base shape, narrowed to the hooks it
+ * implements, so a caller can reach them without asserting they are there.
+ */
+export type OkfManifestPlugin = VitePluginLike &
+  Required<Pick<VitePluginLike, 'resolveId' | 'load' | 'configureServer'>>;
 
 /** The part of a Vite dev server this needs: a watcher, a module graph, a socket. */
 export interface ViteServerLike {
@@ -85,7 +121,7 @@ async function markdownIn(dir: string): Promise<string[]> {
  * Both maps are keyed by bundle-relative path -- `metrics/revenue.md` -- which
  * is what an OKF path is and what the rest of telamon expects.
  */
-export function okfManifest(options: OkfManifestOptions): VitePluginLike {
+export function okfManifest(options: OkfManifestOptions): OkfManifestPlugin {
   const dir = isAbsolute(options.dir) ? options.dir : resolve(process.cwd(), options.dir);
   const id = options.id ?? DEFAULT_MANIFEST_ID;
   const resolved = `\0${id}`;

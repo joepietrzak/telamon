@@ -304,6 +304,27 @@ Two things to know before choosing it:
 
 A corpus small enough to ship whole should be shipped whole — under roughly 10 MB of markdown the inlined build stays near a second and every navigation is instant. Above that, this is how to keep a deployment that is a directory of static files rather than a process.
 
+### Keeping it from coming back
+
+A corpus compiled into an app grows a document at a time. Every commit looks fine, nothing in the build says otherwise, and the first person to notice is a reader on a bad connection. `okfBudget` puts the number in front of whoever added the document, in CI, while it is still cheap to decide about:
+
+```ts
+plugins: [react(), okfBudget({ max: '1 MB' })]
+```
+
+```
+error during build:
+[telamon:okf-budget] First load is 13.9 MB gzipped across 1 chunk, over the 1.00 MB budget.
+  assets/index-Bj7s2S5p.js  13.9 MB
+If a chunk that size is an OKF bundle compiled into the app, `okfManifest` from
+telamon/vite and `useLazyBundle` ship the frontmatter and fetch each body on the
+navigation that needs it.
+```
+
+It measures what a visitor must have before anything renders: entry chunks plus everything they reach by *static* import. A chunk behind `import()` is fetched by the navigation that needs it and is not counted — so on the same 2000-document corpus the inlined build fails this budget and the split one passes it at 669 KB, which is the distinction worth enforcing.
+
+`measure: 'raw'` budgets the bytes on disk instead of the gzipped transfer; `action: 'warn'` reports without failing, for adopting a budget on a project that does not meet it yet. A malformed `max` throws when the plugin is created rather than at the end of a build.
+
 ## Serving a bundle
 
 The library renders a bundle; where the files come from and who does the rendering are separate questions, and both have two answers.
