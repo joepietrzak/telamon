@@ -4,6 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GA4 analytics reference</title>
+    <style>
+      /* The page is the site. Without this, the browser's 8px body margin
+         frames it in the default white, which dark mode makes plain. */
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--okf-color-bg);
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
