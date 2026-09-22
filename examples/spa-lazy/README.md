@@ -107,7 +107,10 @@ OKF_BUNDLE=corpus pnpm --filter telamon-spa-lazy dev
 docker build --build-arg OKF_BUNDLE=corpus -t telamon-spa-lazy .
 ```
 
-`corpus/` is gitignored. Any OKF bundle directory can go there.
+`corpus/` is gitignored. Any OKF bundle directory can go there. The site takes
+its title from the heading of that bundle's root `index.md`, so the corpus is
+"Wikipedia corpus". The GA4 sample's root heading is "Subdirectories", so
+`vite.config.ts` names that one.
 
 ## When to use which
 

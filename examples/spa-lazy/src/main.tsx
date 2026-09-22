@@ -6,12 +6,15 @@ import 'telamon/tokens.css';
 import 'telamon/styles.css';
 import { BODIES, MANIFEST } from 'virtual:okf-manifest';
 
+// Chosen at build time from the bundle being built; see vite.config.ts.
+const TITLE: string = import.meta.env.SITE_TITLE;
+
 function LazySite() {
   // The first bundle is the whole corpus minus its prose: every route, title,
   // type, tag and link, and no bodies. Enough to draw the navigation, answer a
   // search, and lay out the graph. Each navigation then fetches one body.
   const { bundle, onNavigate } = useLazyBundle({ manifest: MANIFEST, bodies: BODIES });
-  return <OkfSite bundle={bundle} title="GA4 analytics reference" onNavigate={onNavigate} />;
+  return <OkfSite bundle={bundle} title={TITLE} onNavigate={onNavigate} />;
 }
 
 const root = document.getElementById('root');
