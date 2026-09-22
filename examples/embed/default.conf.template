@@ -1,0 +1,14 @@
+# The image's entrypoint renders this into conf.d at startup, substituting only
+# variables that are set -- so ${DOCS_URL} is filled in and nginx's own
+# variables are left alone.
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+
+    # Everything this site knows about the docs: where a reader's browser finds
+    # them. An ES module, so main.js can import it.
+    location = /config.js {
+        add_header Cache-Control no-store;
+        return 200 "export const DOCS_URL = '${DOCS_URL}';\n";
+    }
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Knowledge portal</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/main.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <span class="brand">Knowledge portal</span>
+      <span class="origin">another site, on another origin</span>
+    </header>
+
+    <main class="layout">
+      <aside class="panel" aria-labelledby="metrics-heading">
+        <h2 id="metrics-heading">What's in the docs</h2>
+        <p class="summary" id="summary">Loading…</p>
+
+        <table id="metrics">
+          <thead>
+            <tr>
+              <th scope="col">Directory</th>
+              <th scope="col" class="num">Documents</th>
+              <th scope="col" class="num">Markdown</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+
+        <p class="source">
+          <span class="status" id="status" aria-hidden="true"></span>
+          <code id="api-url"></code>
+          <span id="counted"></span>
+        </p>
+      </aside>
+
+      <section class="docs" aria-label="Docs">
+        <div class="docs-bar">
+          <span>Docs</span>
+          <a id="docs-link" target="_blank" rel="noopener">Open on its own ↗</a>
+        </div>
+        <!-- The whole telamon site, in its own window: its routing, styles and
+             React stay its own, and nothing here needs to know how it works. -->
+        <iframe id="docs" title="Knowledge bundle"></iframe>
+      </section>
+    </main>
+  </body>
+</html>

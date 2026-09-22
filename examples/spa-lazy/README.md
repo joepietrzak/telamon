@@ -62,6 +62,53 @@ you read: it is the same cost on the first document and the hundredth.
 - **2011 files instead of 3.** Fine for any static host; worth knowing if
   something in your pipeline counts files.
 
+## An API from the same server
+
+`api.ts` adds `GET /api/metrics` to both `vite` and `vite preview`. It reports
+how many documents each top-level directory holds and how much markdown they
+add up to. In the Wikipedia corpus each directory is one language:
+
+```json
+{
+  "documents": 2000,
+  "bytes": 46184419,
+  "directories": [
+    { "name": "en", "documents": 700, "bytes": 16184357 },
+    { "name": "de", "documents": 200, "bytes": 4425840 },
+    { "name": "ja", "documents": 200, "bytes": 4561655 }
+  ],
+  "countedAt": "2026-09-22T03:53:51.597Z"
+}
+```
+
+It is a Vite plugin with one hook per mode:
+
+- **`vite`**: `configureServer` counts the directory on every request, which
+  takes about 0.25s on the corpus. A new document shows up on the next fetch.
+- **`vite build`**: `generateBundle` counts once and emits `dist/metrics.json`.
+- **`vite preview`**: `configurePreviewServer` serves that file. The image that
+  runs has no markdown left to count, so it answers with the build's count, and
+  the numbers are exactly as fresh as the site.
+
+Middleware registered in those hooks runs ahead of Vite's own, which is why the
+SPA fallback never answers `/api/metrics` with `index.html`. The response sends
+`Access-Control-Allow-Origin: *` so that a page on another origin can read it.
+[`../embed`](../embed) is one such page. It also embeds this site in an iframe.
+
+Since `vite preview` now needs a plugin, the runtime stage ships
+`vite.config.ts` and `api.ts`. A plain static host serving `dist/` still has
+`/metrics.json`, but has no `/api/metrics`.
+
+`OKF_BUNDLE` picks the bundle directory. It defaults to `bundle/`, and the
+Dockerfile takes it as a build arg:
+
+```bash
+OKF_BUNDLE=corpus pnpm --filter telamon-spa-lazy dev
+docker build --build-arg OKF_BUNDLE=corpus -t telamon-spa-lazy .
+```
+
+`corpus/` is gitignored. Any OKF bundle directory can go there.
+
 ## When to use which
 
 Ship the corpus (`../spa`) when it is small — under roughly 10 MB of markdown,

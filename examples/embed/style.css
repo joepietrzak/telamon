@@ -1,0 +1,202 @@
+/* Deliberately not telamon's look: this is someone else's site, and the seam
+   between the two should be visible. */
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --fg: #1c1f1a;
+  --muted: #646b60;
+  --border: #dde0d8;
+  --bar-bg: #1f3a2e;
+  --bar-fg: #eef3ee;
+  --accent: #2f7d5b;
+  --accent-soft: #dcefe5;
+  --danger: #b4232b;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121512;
+    --surface: #1a1e1a;
+    --fg: #e6e9e3;
+    --muted: #9aa294;
+    --border: #2d332c;
+    --bar-bg: #0c1f17;
+    --accent: #5fbf8f;
+    --accent-soft: #1f3a2e;
+    --danger: #f07178;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    15px/1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.85rem 1.5rem;
+  background: var(--bar-bg);
+  color: var(--bar-fg);
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.origin {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(20rem, 24rem) 1fr;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  height: calc(100vh - 3.2rem);
+}
+
+.panel,
+.docs {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-height: 0;
+}
+
+.panel {
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.summary {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 0.45rem 0.25rem;
+  text-align: left;
+  font-weight: normal;
+  border-bottom: 1px solid var(--border);
+}
+
+thead th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+tbody th {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+tfoot th,
+tfoot td {
+  font-weight: 600;
+  border-bottom: none;
+}
+
+.num {
+  text-align: right;
+}
+
+.muted {
+  font-family: system-ui, sans-serif;
+  color: var(--muted);
+}
+
+/* A bar along the bottom of the row, as long as the row's share of the total. */
+tbody tr {
+  background: linear-gradient(var(--accent), var(--accent)) no-repeat left bottom /
+    calc(var(--share) * 100%) 3px;
+}
+
+.source {
+  margin: 1rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.status[data-state='ok'] {
+  background: var(--accent);
+}
+
+.status[data-state='error'] {
+  background: var(--danger);
+}
+
+.docs {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.docs-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.docs-bar a {
+  color: var(--accent);
+}
+
+iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+@media (max-width: 52rem) {
+  .layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .docs {
+    height: 85vh;
+  }
+}

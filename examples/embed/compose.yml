@@ -1,0 +1,21 @@
+# `docker compose up` for two sites on two origins: the docs, and a site that
+# embeds them and reads their API.
+services:
+  docs:
+    build:
+      context: ../spa-lazy
+      args:
+        # `OKF_BUNDLE=corpus docker compose up --build` for the 2000-document
+        # Wikipedia sample, if ../spa-lazy/corpus exists.
+        OKF_BUNDLE: ${OKF_BUNDLE:-bundle}
+    ports:
+      - '3000:3000'
+
+  site:
+    build: .
+    environment:
+      # Not http://docs:3000. That name only resolves inside this network, and
+      # the iframe and the fetch both run in the reader's browser.
+      DOCS_URL: http://localhost:3000
+    ports:
+      - '8080:8080'

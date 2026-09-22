@@ -24,6 +24,18 @@ export default tseslint.config(
     },
   },
   {
+    // The embed example's page script, which runs in a browser.
+    files: ['examples/embed/**/*.js'],
+    languageOptions: {
+      globals: {
+        Intl: 'readonly',
+        URL: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+      },
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
